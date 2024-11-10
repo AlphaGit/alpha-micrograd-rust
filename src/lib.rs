@@ -1,4 +1,5 @@
 use std::ops::Add;
+use std::ops::Mul;
 
 #[derive(Debug)]
 struct Value {
@@ -11,6 +12,16 @@ impl Add for Value {
     fn add(self, other: Value) -> Value {
         Value {
             data: self.data + other.data,
+        }
+    }
+}
+
+impl Mul for Value {
+    type Output = Value;
+
+    fn mul(self, other: Value) -> Value {
+        Value {
+            data: self.data * other.data,
         }
     }
 }
@@ -31,5 +42,13 @@ mod tests {
         let value2 = Value { data: 4.0 };
         let result = value1 + value2;
         assert_eq!(result.data, 7.0);
+    }
+
+    #[test]
+    fn can_multiply() {
+        let value1 = Value { data: 3.0 };
+        let value2 = Value { data: 4.0 };
+        let result = value1 * value2;
+        assert_eq!(result.data, 12.0);
     }
 }
