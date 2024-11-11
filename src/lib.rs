@@ -57,6 +57,16 @@ mod tests {
     }
 
     #[test]
+    fn can_be_instantiated_with_multiple_previous() {
+        let value1 = new_value![3.0];
+        let value2 = new_value![4.0];
+        let value3 = new_value![5.0, value1, value2];
+        assert_eq!(value3.data, 5.0);
+        assert_eq!(value3.previous[0].data, 3.0);
+        assert_eq!(value3.previous[1].data, 4.0);
+    }
+
+    #[test]
     fn can_add() {
         let value1 = new_value![3.0];
         let value2 = new_value![4.0];
