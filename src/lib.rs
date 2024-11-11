@@ -2,39 +2,61 @@ use std::ops::Add;
 use std::ops::Mul;
 
 #[derive(Debug)]
-struct Value {
+struct Expr {
     data: f64,
-    previous: Vec<Value>,
+    operand1: Option<Box<Expr>>,
+    operand2: Option<Box<Expr>>,
+    operation: Option<Operation>,
 }
 
-macro_rules! new_value {
-    ($data:expr) => {
-        Value::new($data, vec![])
-    };
-    ($data: expr, $($rest: expr),+) => {
-        Value::new($data, vec![$($rest),+])
-    };
+#[derive(Debug, PartialEq)]
+enum Operation {
+    Add,
+    Mul,
 }
 
-impl Value {
-    fn new(data: f64, previous: Vec<Value>) -> Value {
-        Value { data, previous }
+impl Expr {
+    fn new(data: f64) -> Expr {
+        Expr {
+            data,
+            operand1: None,
+            operand2: None,
+            operation: None,
+        }
+    }
+
+    fn new_unary(data: f64, previous: Expr, operation: Operation) -> Expr {
+        Expr {
+            data,
+            operand1: Some(Box::new(previous)),
+            operand2: None,
+            operation: Some(operation),
+        }
+    }
+
+    fn new_binary(data: f64, operand1: Expr, operand2: Expr, operation: Operation) -> Expr {
+        Expr {
+            data,
+            operand1: Some(Box::new(operand1)),
+            operand2: Some(Box::new(operand2)),
+            operation: Some(operation),
+        }
     }
 }
 
-impl Add for Value {
-    type Output = Value;
+impl Add for Expr {
+    type Output = Expr;
 
-    fn add(self, other: Value) -> Value {
-        Value::new(self.data + other.data, vec![self, other])
+    fn add(self, other: Expr) -> Expr {
+        Expr::new_binary(self.data + other.data, self, other, Operation::Add)
     }
 }
 
-impl Mul for Value {
-    type Output = Value;
+impl Mul for Expr {
+    type Output = Expr;
 
-    fn mul(self, other: Value) -> Value {
-        Value::new(self.data * other.data, vec![self, other])
+    fn mul(self, other: Expr) -> Expr {
+        Expr::new_binary(self.data * other.data, self, other, Operation::Mul)
     }
 }
 
@@ -44,41 +66,41 @@ mod tests {
 
     #[test]
     fn can_be_instantiated() {
-        let value = new_value![3.0];
+        let value = Expr::new(3.0);
         assert_eq!(value.data, 3.0);
     }
 
     #[test]
-    fn can_be_instantiated_with_previous() {
-        let value1 = new_value![3.0];
-        let value2 = new_value![4.0, value1];
-        assert_eq!(value2.data, 4.0);
-        assert_eq!(value2.previous[0].data, 3.0);
-    }
+    fn can_be_instantiated_with_dependencies() {
+        let value1 = Expr::new(3.0);
+        let value2 = Expr::new(4.0);
+        let value3 = Expr::new_binary(5.0, value1, value2, Operation::Add);
 
-    #[test]
-    fn can_be_instantiated_with_multiple_previous() {
-        let value1 = new_value![3.0];
-        let value2 = new_value![4.0];
-        let value3 = new_value![5.0, value1, value2];
         assert_eq!(value3.data, 5.0);
-        assert_eq!(value3.previous[0].data, 3.0);
-        assert_eq!(value3.previous[1].data, 4.0);
+        assert_eq!(value3.operand1.unwrap().data, 3.0);
+        assert_eq!(value3.operand2.unwrap().data, 4.0);
     }
 
     #[test]
     fn can_add() {
-        let value1 = new_value![3.0];
-        let value2 = new_value![4.0];
+        let value1 = Expr::new(3.0);
+        let value2 = Expr::new(4.0);
+
         let result = value1 + value2;
         assert_eq!(result.data, 7.0);
+        assert_eq!(result.operand1.unwrap().data, 3.0);
+        assert_eq!(result.operand2.unwrap().data, 4.0);
+        assert_eq!(result.operation, Some(Operation::Add));
     }
 
     #[test]
     fn can_multiply() {
-        let value1 = new_value![3.0];
-        let value2 = new_value![4.0];
+        let value1 = Expr::new(3.0);
+        let value2 = Expr::new(4.0);
         let result = value1 * value2;
         assert_eq!(result.data, 12.0);
+        assert_eq!(result.operand1.unwrap().data, 3.0);
+        assert_eq!(result.operand2.unwrap().data, 4.0);
+        assert_eq!(result.operation, Some(Operation::Mul));
     }
 }
