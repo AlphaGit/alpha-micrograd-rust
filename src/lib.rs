@@ -13,6 +13,7 @@ struct Expr {
 enum Operation {
     Add,
     Mul,
+    Tanh,
 }
 
 impl Expr {
@@ -41,6 +42,13 @@ impl Expr {
             operand2: Some(Box::new(operand2)),
             operation: Some(operation),
         }
+    }
+
+    fn tanh(self) -> Expr {
+        let e_2x = self.data.powi(2).exp();
+        let numerator = e_2x - 1.0;
+        let denominator = e_2x + 1.0;
+        return Expr::new_unary(numerator / denominator, self, Operation::Tanh);
     }
 }
 
@@ -102,5 +110,14 @@ mod tests {
         assert_eq!(result.operand1.unwrap().data, 3.0);
         assert_eq!(result.operand2.unwrap().data, 4.0);
         assert_eq!(result.operation, Some(Operation::Mul));
+    }
+
+    #[test]
+    fn can_compute_tanh() {
+        let value = Expr::new(0.0);
+        let result = value.tanh();
+        assert_eq!(result.data, 0.0);
+        assert_eq!(result.operand1.unwrap().data, 0.0);
+        assert_eq!(result.operation, Some(Operation::Tanh));
     }
 }
