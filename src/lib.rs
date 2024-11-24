@@ -116,7 +116,7 @@ impl Expr {
     }
 
     fn backpropagate(&mut self) {
-        let grad = self.grad();
+        let out_grad = self.grad();
         match self {
             Expr::Leaf(_) => {}
             Expr::Unary(_) => {}
@@ -126,10 +126,13 @@ impl Expr {
 
                 match binary.operation {
                     Operation::Add => {
-                        operand1.set_grad(grad);
-                        operand2.set_grad(grad);
+                        operand1.set_grad(out_grad);
+                        operand2.set_grad(out_grad);
                     }
-                    Operation::Mul => {}
+                    Operation::Mul => {
+                        operand1.set_grad(out_grad * operand2.data());
+                        operand2.set_grad(out_grad * operand1.data());
+                    }
                     Operation::Tanh => {}
                 }
             }
@@ -262,6 +265,23 @@ mod tests {
         if let Expr::Binary(binary) = addition {
             assert_eq!(binary.operand1.grad(), 2.0);
             assert_eq!(binary.operand2.grad(), 2.0);
+        } else {
+            assert_eq!(false, true)
+        }
+    }
+
+    #[test]
+    fn multiplication_backpropagation() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2: Expr = LeafExpr::new(4.0).into();
+        let mut multiplication = value1 * value2;
+
+        multiplication.set_grad(2.0);
+        multiplication.backpropagate();
+
+        if let Expr::Binary(binary) = multiplication {
+            assert_eq!(binary.operand1.grad(), 8.0);
+            assert_eq!(binary.operand2.grad(), 6.0);
         } else {
             assert_eq!(false, true)
         }
