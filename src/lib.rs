@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::ops::Add;
 use std::ops::Mul;
 
@@ -106,8 +107,33 @@ impl Expr {
         }
     }
 
-    fn backpropagate(&self) {
-        // TODO: Implement backpropagation
+    fn set_grad(&mut self, grad: f64) {
+        match self {
+            Expr::Leaf(leaf) => leaf.grad = grad,
+            Expr::Unary(unary) => unary.grad = grad,
+            Expr::Binary(binary) => binary.grad = grad,
+        }
+    }
+
+    fn backpropagate(&mut self) {
+        let grad = self.grad();
+        match self {
+            Expr::Leaf(_) => {}
+            Expr::Unary(_) => {}
+            Expr::Binary(binary) => {
+                let operand1: &mut Expr = binary.operand1.borrow_mut();
+                let operand2: &mut Expr = binary.operand2.borrow_mut();
+
+                match binary.operation {
+                    Operation::Add => {
+                        operand1.set_grad(grad);
+                        operand2.set_grad(grad);
+                    }
+                    Operation::Mul => {}
+                    Operation::Tanh => {}
+                }
+            }
+        }
     }
 }
 
@@ -219,6 +245,23 @@ mod tests {
         if let Expr::Unary(unary) = result {
             assert_eq!(unary.operand.data(), 0.0);
             assert_eq!(unary.operation, Operation::Tanh);
+        } else {
+            assert_eq!(false, true)
+        }
+    }
+
+    #[test]
+    fn addition_backpropagation() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2: Expr = LeafExpr::new(4.0).into();
+        let mut addition = value1 + value2;
+
+        addition.set_grad(2.0);
+        addition.backpropagate();
+
+        if let Expr::Binary(binary) = addition {
+            assert_eq!(binary.operand1.grad(), 2.0);
+            assert_eq!(binary.operand2.grad(), 2.0);
         } else {
             assert_eq!(false, true)
         }
