@@ -119,7 +119,22 @@ impl Expr {
         let out_grad = self.grad();
         match self {
             Expr::Leaf(_) => {}
-            Expr::Unary(_) => {}
+            Expr::Unary(unary) => {
+                let operand: &mut Expr = unary.operand.borrow_mut();
+
+                match unary.operation {
+                    Operation::Tanh => {
+                        let tanh_grad = 1.0 - unary.data.powi(2);
+                        operand.set_grad(out_grad * tanh_grad);
+                    }
+                    Operation::Add => {
+                        panic!("Add is not a Unary operation.")
+                    }
+                    Operation::Mul => {
+                        panic!("Mul is not a Unary operation.")
+                    }
+                }
+            }
             Expr::Binary(binary) => {
                 let operand1: &mut Expr = binary.operand1.borrow_mut();
                 let operand2: &mut Expr = binary.operand2.borrow_mut();
@@ -133,7 +148,9 @@ impl Expr {
                         operand1.set_grad(out_grad * operand2.data());
                         operand2.set_grad(out_grad * operand1.data());
                     }
-                    Operation::Tanh => {}
+                    Operation::Tanh => {
+                        panic!("Tanh is not a Binary operation.")
+                    }
                 }
             }
         }
@@ -282,6 +299,21 @@ mod tests {
         if let Expr::Binary(binary) = multiplication {
             assert_eq!(binary.operand1.grad(), 8.0);
             assert_eq!(binary.operand2.grad(), 6.0);
+        } else {
+            assert_eq!(false, true)
+        }
+    }
+
+    #[test]
+    fn tanh_backpropagation() {
+        let value: Expr = LeafExpr::new(0.0).into();
+        let mut tanh = value.tanh();
+
+        tanh.set_grad(2.0);
+        tanh.backpropagate();
+
+        if let Expr::Unary(unary) = tanh {
+            assert_eq!(unary.operand.grad(), 2.0);
         } else {
             assert_eq!(false, true)
         }
