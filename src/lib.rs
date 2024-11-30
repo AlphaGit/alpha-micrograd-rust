@@ -9,19 +9,35 @@ struct LeafExpr {
     grad: f64,
 }
 
-impl LeafExpr {
-    fn new(data: f64) -> Expr {
-        let leaf = LeafExpr { data, grad: 0.0 };
-        Expr::Leaf(leaf)
-    }
-}
-
 #[derive(Debug, Clone)]
 struct UnaryExpr {
     data: f64,
     operand: Rc<RefCell<Expr>>,
     operation: Operation,
     grad: f64,
+}
+
+#[derive(Debug, Clone)]
+struct BinaryExpr {
+    data: f64,
+    operand1: Rc<RefCell<Expr>>,
+    operand2: Rc<RefCell<Expr>>,
+    operation: Operation,
+    grad: f64,
+}
+
+#[derive(Debug, Clone)]
+enum Expr {
+    Leaf(LeafExpr),
+    Unary(UnaryExpr),
+    Binary(BinaryExpr),
+}
+
+impl LeafExpr {
+    fn new(data: f64) -> Expr {
+        let leaf = LeafExpr { data, grad: 0.0 };
+        Expr::Leaf(leaf)
+    }
 }
 
 impl UnaryExpr {
@@ -35,15 +51,6 @@ impl UnaryExpr {
         };
         Expr::Unary(unary)
     }
-}
-
-#[derive(Debug, Clone)]
-struct BinaryExpr {
-    data: f64,
-    operand1: Rc<RefCell<Expr>>,
-    operand2: Rc<RefCell<Expr>>,
-    operation: Operation,
-    grad: f64,
 }
 
 impl BinaryExpr {
@@ -60,13 +67,6 @@ impl BinaryExpr {
         };
         Expr::Binary(binary)
     }
-}
-
-#[derive(Debug, Clone)]
-enum Expr {
-    Leaf(LeafExpr),
-    Unary(UnaryExpr),
-    Binary(BinaryExpr),
 }
 
 impl Expr {
@@ -96,9 +96,9 @@ impl Expr {
 
     fn set_grad(&mut self, grad: f64) {
         match self {
-            Expr::Leaf(leaf) => leaf.grad = grad,
-            Expr::Unary(unary) => unary.grad = grad,
-            Expr::Binary(binary) => binary.grad = grad,
+            Expr::Leaf(leaf) => leaf.grad += grad,
+            Expr::Unary(unary) => unary.grad += grad,
+            Expr::Binary(binary) => binary.grad += grad,
         }
     }
 
@@ -397,5 +397,46 @@ mod tests {
         let w2 = x2w2.operand2.borrow();
         let w2 = assert_get_leaf_ref(w2);
         assert_float_eq(w2.grad, 0.0);
+    }
+
+    #[test]
+    fn fix_same_object_error_addition() {
+        let a = LeafExpr::new(3.0);
+        let mut b = a.clone() + a.clone();
+
+        b.backpropagate();
+
+        let a = assert_get_leaf_expr(a);
+        assert_float_eq(a.grad, 2.0);
+    }
+
+    #[test]
+    fn crossing_paths_test() {
+        let a = LeafExpr::new(-2.0);
+        let b = LeafExpr::new(3.0);
+
+        let d = a.clone() * b.clone();
+        let e = a * b;
+        let mut f = d + e;
+
+        f.backpropagate();
+
+        let f = assert_get_binary_expr(f);
+        let d = f.operand1.borrow();
+        let e = f.operand2.borrow();
+        assert_float_eq(e.grad(), -6.0);
+        assert_float_eq(d.grad(), 1.0);
+
+        let d = assert_get_binary_expr(d.clone());
+        let a = d.operand1.borrow();
+        let b = d.operand2.borrow();
+        assert_float_eq(a.grad(), -3.0);
+        assert_float_eq(b.grad(), -8.0);
+
+        let e = assert_get_binary_expr(e.clone());
+        let a = e.operand1.borrow();
+        let b = e.operand2.borrow();
+        assert_float_eq(a.grad(), -3.0);
+        assert_float_eq(b.grad(), -8.0);
     }
 }
