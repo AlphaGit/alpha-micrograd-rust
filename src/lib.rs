@@ -161,12 +161,48 @@ impl Add for Expr {
     }
 }
 
+impl Add<i32> for Expr {
+    type Output = Expr;
+
+    fn add(self: Self, rhs: i32) -> Self::Output {
+        let rhs = LeafExpr::new(rhs as f64);
+        self + rhs
+    }
+}
+
+impl Add<f64> for Expr {
+    type Output = Expr;
+
+    fn add(self: Self, rhs: f64) -> Self::Output {
+        let rhs = LeafExpr::new(rhs);
+        self + rhs
+    }
+}
+
 impl Mul for Expr {
     type Output = Expr;
 
     fn mul(self, rhs: Expr) -> Self::Output {
         let data = self.data() * rhs.data();
         BinaryExpr::new(data, self, rhs, Operation::Mul)
+    }
+}
+
+impl Mul<i32> for Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        let rhs = LeafExpr::new(rhs as f64);
+        self * rhs
+    }
+}
+
+impl Mul<f64> for Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        let rhs = LeafExpr::new(rhs);
+        self * rhs
     }
 }
 
@@ -211,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn can_add() {
+    fn can_add_expr() {
         let value1: Expr = LeafExpr::new(3.0).into();
         let value2: Expr = LeafExpr::new(4.0).into();
 
@@ -229,9 +265,79 @@ mod tests {
     }
 
     #[test]
-    fn can_multiply() {
+    fn can_add_int() {
+        let value1 = LeafExpr::new(3.0);
+        let result = value1 + 4;
+
+        assert_eq!(result.data(), 7.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Add);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_add_float() {
+        let value1 = LeafExpr::new(3.0);
+        let result = value1 + 4.0;
+
+        assert_eq!(result.data(), 7.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Add);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_multiply_expr() {
         let value1: Expr = LeafExpr::new(3.0).into();
         let value2: Expr = LeafExpr::new(4.0).into();
+
+        let result = value1 * value2;
+        assert_eq!(result.data(), 12.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Mul);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_multiply_int() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2 = 4;
+
+        let result = value1 * value2;
+        assert_eq!(result.data(), 12.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Mul);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_multiply_float() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2 = 4.0;
 
         let result = value1 * value2;
         assert_eq!(result.data(), 12.0);
