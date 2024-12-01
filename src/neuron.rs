@@ -143,4 +143,39 @@ mod tests {
 
         assert_eq!(y.len(), 1);
     }
+
+    #[test]
+    fn can_learn() {
+        let mlp = MLP::new(3, vec![2, 2], 1);
+
+        let inputs = vec![
+            vec![LeafExpr::new(2.0), LeafExpr::new(3.0), LeafExpr::new(-1.0)],
+            vec![LeafExpr::new(3.0), LeafExpr::new(-1.0), LeafExpr::new(0.5)],
+            vec![LeafExpr::new(0.5), LeafExpr::new(1.0), LeafExpr::new(1.0)],
+            vec![LeafExpr::new(1.0), LeafExpr::new(1.0), LeafExpr::new(-1.0)],
+        ];
+
+        let targets = vec![
+            LeafExpr::new(1.0),
+            LeafExpr::new(-1.0),
+            LeafExpr::new(-1.0),
+            LeafExpr::new(1.0),
+        ];
+
+        let predicted = inputs
+            .iter()
+            .map(|x| mlp.forward(x.clone()))
+            .map(|x| x[0].clone())
+            .collect::<Vec<_>>();
+
+        let mut loss = predicted
+            .iter()
+            .zip(targets.iter())
+            .map(|(p, t)| (p.clone() - t.clone()).powi(2))
+            .sum::<Expr>();
+
+        // loss.reset_grads();
+        loss.backpropagate();
+        // loss.learn_grads(0.1);
+    }
 }

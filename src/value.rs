@@ -1,6 +1,8 @@
 use std::cell::RefCell;
+use std::iter::Sum;
 use std::ops::Add;
 use std::ops::Mul;
+use std::ops::Sub;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
@@ -83,6 +85,18 @@ impl Expr {
         UnaryExpr::new(data, self, Operation::Exp)
     }
 
+    pub fn powi(self: Expr, n: i32) -> Expr {
+        let data = self.data().powi(n);
+        let exponent = LeafExpr::new(n as f64);
+        BinaryExpr::new(data, self, exponent, Operation::Pow)
+    }
+
+    pub fn powf(self: Expr, n: f64) -> Expr {
+        let data = self.data().powf(n);
+        let exponent = LeafExpr::new(n);
+        BinaryExpr::new(data, self, exponent, Operation::Pow)
+    }
+
     pub fn data(&self) -> f64 {
         match self {
             Expr::Leaf(leaf) => leaf.data,
@@ -99,7 +113,7 @@ impl Expr {
         }
     }
 
-    fn set_grad(&mut self, grad: f64) {
+    fn incr_grad(&mut self, grad: f64) {
         match self {
             Expr::Leaf(leaf) => leaf.grad += grad,
             Expr::Unary(unary) => unary.grad += grad,
@@ -107,7 +121,7 @@ impl Expr {
         }
     }
 
-    fn backpropagate(&mut self) {
+    pub fn backpropagate(&mut self) {
         let out_grad = self.grad();
         let out_data = self.data();
         match self {
@@ -119,15 +133,21 @@ impl Expr {
                     Operation::Add => {
                         panic!("Add is not a Unary operation.")
                     }
+                    Operation::Sub => {
+                        panic!("Sub is not a Unary operation.")
+                    }
                     Operation::Mul => {
                         panic!("Mul is not a Unary operation.")
                     }
                     Operation::Tanh => {
                         let tanh_grad = 1.0 - out_data.powi(2);
-                        operand.set_grad(out_grad * tanh_grad);
+                        operand.incr_grad(out_grad * tanh_grad);
                     }
                     Operation::Exp => {
-                        operand.set_grad(out_grad * out_data);
+                        operand.incr_grad(out_grad * out_data);
+                    }
+                    Operation::Pow => {
+                        panic!("Pow is not a Unary operation.")
                     }
                 }
             }
@@ -137,18 +157,27 @@ impl Expr {
 
                 match binary.operation {
                     Operation::Add => {
-                        operand1.set_grad(out_grad);
-                        operand2.set_grad(out_grad);
+                        operand1.incr_grad(out_grad);
+                        operand2.incr_grad(out_grad);
+                    }
+                    Operation::Sub => {
+                        operand1.incr_grad(out_grad);
+                        operand2.incr_grad(-out_grad);
                     }
                     Operation::Mul => {
-                        operand1.set_grad(out_grad * operand2.data());
-                        operand2.set_grad(out_grad * operand1.data());
+                        operand1.incr_grad(out_grad * operand2.data());
+                        operand2.incr_grad(out_grad * operand1.data());
                     }
                     Operation::Tanh => {
                         panic!("Tanh is not a Binary operation.")
                     }
                     Operation::Exp => {
                         panic!("Exp is not a Binary operation.")
+                    }
+                    Operation::Pow => {
+                        let exponent = operand2.data();
+                        operand1.incr_grad(out_grad * exponent * out_data.powf(exponent - 1.0));
+                        operand2.incr_grad(out_grad * out_data.powf(exponent) * out_data.ln());
                     }
                 }
             }
@@ -159,7 +188,9 @@ impl Expr {
 #[derive(PartialEq, Debug, Clone)]
 enum Operation {
     Add,
+    Sub,
     Mul,
+    Pow,
     Tanh,
     Exp,
 }
@@ -251,6 +282,59 @@ impl Mul<Expr> for f64 {
     fn mul(self, rhs: Expr) -> Self::Output {
         let lhs = LeafExpr::new(self);
         lhs * rhs
+    }
+}
+
+impl Sub for Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: Expr) -> Self::Output {
+        BinaryExpr::new(self.data() - rhs.data(), self, rhs, Operation::Sub)
+    }
+}
+
+impl Sub<i32> for Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: i32) -> Self::Output {
+        let rhs = LeafExpr::new(rhs as f64);
+        self - rhs
+    }
+}
+
+impl Sub<f64> for Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        let rhs = LeafExpr::new(rhs);
+        self - rhs
+    }
+}
+
+impl Sub<Expr> for i32 {
+    type Output = Expr;
+
+    fn sub(self, rhs: Expr) -> Self::Output {
+        let lhs = LeafExpr::new(self as f64);
+        lhs - rhs
+    }
+}
+
+impl Sub<Expr> for f64 {
+    type Output = Expr;
+
+    fn sub(self, rhs: Expr) -> Self::Output {
+        let lhs = LeafExpr::new(self);
+        lhs - rhs
+    }
+}
+
+impl Sum for Expr {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(LeafExpr::new(0.0), |acc, x| acc + x)
     }
 }
 
@@ -471,6 +555,96 @@ mod tests {
     }
 
     #[test]
+    fn can_sub_expr() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2: Expr = LeafExpr::new(4.0).into();
+
+        let result = value1 - value2;
+        assert_eq!(result.data(), -1.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Sub);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_sub_float_rhs() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2 = 4.0;
+
+        let result = value1 - value2;
+        assert_eq!(result.data(), -1.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Sub);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_sub_float_lhs() {
+        let value1 = 3.0;
+        let value2: Expr = LeafExpr::new(4.0).into();
+
+        let result = value1 - value2;
+        assert_eq!(result.data(), -1.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Sub);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_sub_int_rhs() {
+        let value1: Expr = LeafExpr::new(3.0).into();
+        let value2 = 4;
+
+        let result = value1 - value2;
+        assert_eq!(result.data(), -1.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Sub);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
+    fn can_sub_int_lhs() {
+        let value1 = 3;
+        let value2: Expr = LeafExpr::new(4.0).into();
+
+        let result = value1 - value2;
+        assert_eq!(result.data(), -1.0);
+
+        let result = assert_get_binary_expr(result);
+        assert_eq!(result.operation, Operation::Sub);
+
+        let operand1 = result.operand1.borrow();
+        let operand2 = result.operand2.borrow();
+
+        assert_eq!(operand1.data(), 3.0);
+        assert_eq!(operand2.data(), 4.0);
+    }
+
+    #[test]
     fn can_compute_tanh() {
         let value: Expr = LeafExpr::new(0.0).into();
 
@@ -504,7 +678,7 @@ mod tests {
         let value2: Expr = LeafExpr::new(4.0).into();
         let mut addition = value1 + value2;
 
-        addition.set_grad(2.0);
+        addition.incr_grad(2.0);
         addition.backpropagate();
 
         let addition = assert_get_binary_expr(addition);
@@ -521,7 +695,7 @@ mod tests {
         let value2: Expr = LeafExpr::new(4.0).into();
         let mut multiplication = value1 * value2;
 
-        multiplication.set_grad(2.0);
+        multiplication.incr_grad(2.0);
         multiplication.backpropagate();
 
         let multiplication = assert_get_binary_expr(multiplication);
@@ -537,7 +711,7 @@ mod tests {
         let value: Expr = LeafExpr::new(0.0).into();
         let mut tanh = value.tanh();
 
-        tanh.set_grad(2.0);
+        tanh.incr_grad(2.0);
         tanh.backpropagate();
 
         let tanh = assert_get_unary_expr(tanh);
@@ -594,7 +768,7 @@ mod tests {
         let n = x1w1_x2w2 + b;
         let mut o = n.tanh();
 
-        o.set_grad(1.0);
+        o.incr_grad(1.0);
         o.backpropagate();
 
         let o = assert_get_unary_expr(o);
