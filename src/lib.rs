@@ -78,6 +78,11 @@ impl Expr {
         return UnaryExpr::new(numerator / denominator, self, Operation::Tanh);
     }
 
+    fn exp(self: Expr) -> Expr {
+        let data = self.data().exp();
+        UnaryExpr::new(data, self, Operation::Exp)
+    }
+
     fn data(&self) -> f64 {
         match self {
             Expr::Leaf(leaf) => leaf.data,
@@ -111,15 +116,18 @@ impl Expr {
                 let mut operand = unary.operand.borrow_mut();
 
                 match unary.operation {
-                    Operation::Tanh => {
-                        let tanh_grad = 1.0 - out_data.powi(2);
-                        operand.set_grad(out_grad * tanh_grad);
-                    }
                     Operation::Add => {
                         panic!("Add is not a Unary operation.")
                     }
                     Operation::Mul => {
                         panic!("Mul is not a Unary operation.")
+                    }
+                    Operation::Tanh => {
+                        let tanh_grad = 1.0 - out_data.powi(2);
+                        operand.set_grad(out_grad * tanh_grad);
+                    }
+                    Operation::Exp => {
+                        operand.set_grad(out_grad * out_data);
                     }
                 }
             }
@@ -139,6 +147,9 @@ impl Expr {
                     Operation::Tanh => {
                         panic!("Tanh is not a Binary operation.")
                     }
+                    Operation::Exp => {
+                        panic!("Exp is not a Binary operation.")
+                    }
                 }
             }
         }
@@ -150,6 +161,7 @@ enum Operation {
     Add,
     Mul,
     Tanh,
+    Exp,
 }
 
 impl Add for Expr {
@@ -439,6 +451,7 @@ mod tests {
         assert_eq!(operand1.data(), 3.0);
         assert_eq!(operand2.data(), 4.0);
     }
+
     #[test]
     fn can_multiply_float_lhs() {
         let value1 = 3.0;
@@ -456,6 +469,7 @@ mod tests {
         assert_eq!(operand1.data(), 3.0);
         assert_eq!(operand2.data(), 4.0);
     }
+
     #[test]
     fn can_compute_tanh() {
         let value: Expr = LeafExpr::new(0.0).into();
@@ -465,6 +479,20 @@ mod tests {
 
         let result = assert_get_unary_expr(result);
         assert_eq!(result.operation, Operation::Tanh);
+
+        let operand = result.operand.borrow();
+        assert_eq!(operand.data(), 0.0);
+    }
+
+    #[test]
+    fn can_compute_exp() {
+        let value = LeafExpr::new(0.0);
+
+        let result = value.exp();
+        assert_eq!(result.data(), 1.0);
+
+        let result = assert_get_unary_expr(result);
+        assert_eq!(result.operation, Operation::Exp);
 
         let operand = result.operand.borrow();
         assert_eq!(operand.data(), 0.0);
