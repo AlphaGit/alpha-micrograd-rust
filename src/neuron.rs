@@ -1,43 +1,47 @@
-use crate::value::{Expr, LeafExpr};
+use crate::value::Expr;
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
 
-struct Neuron {
-    w: Vec<f64>,
-    b: f64,
+struct Neuron<'a> {
+    w: Vec<Expr<'a>>,
+    b: Expr<'a>,
 }
 
-struct Layer {
-    neurons: Vec<Neuron>,
+struct Layer<'a> {
+    neurons: Vec<Neuron<'a>>,
 }
 
-struct MLP {
-    layers: Vec<Layer>,
+struct MLP<'a> {
+    layers: Vec<Layer<'a>>,
 }
 
-impl Neuron {
-    fn new(n_inputs: u32) -> Neuron {
+impl<'a> Neuron<'a> {
+    fn new(n_inputs: u32) -> Neuron<'a> {
         let between = Uniform::new_inclusive(-1.0, 1.0);
         let mut rng = thread_rng();
         Neuron {
-            w: (0..n_inputs).map(|_| between.sample(&mut rng)).collect(),
-            b: between.sample(&mut rng),
+            w: (0..n_inputs)
+                .map(|_| between.sample(&mut rng))
+                .map(|v| Expr::from(v))
+                .collect(),
+            b: Expr::from(between.sample(&mut rng)),
         }
     }
 
-    fn forward(&self, x: Vec<Expr>) -> Expr {
+    fn forward(&mut self, x: Vec<Expr<'a>>) -> Expr<'a> {
         assert_eq!(
             x.len(),
             self.w.len(),
             "Number of inputs must match number of weights"
         );
 
-        let mut sum = LeafExpr::new(0.0);
+        let sum = x
+            .iter()
+            .enumerate()
+            .map(|(i, x_i)| x_i * &self.w[i])
+            .reduce(|a, b| &a + &b)
+            .unwrap();
 
-        for (i, x_i) in x.iter().enumerate() {
-            sum = sum + (x_i.clone() * self.w[i]);
-        }
-
-        let activation = sum + self.b;
+        let activation = &sum + &self.b;
         activation.tanh()
     }
 }
@@ -49,7 +53,7 @@ impl Layer {
         }
     }
 
-    fn forward(&self, x: Vec<Expr>) -> Vec<Expr> {
+    fn forward(&mut self, x: Vec<Expr>) -> Vec<Expr> {
         self.neurons.iter().map(|n| n.forward(x.clone())).collect()
     }
 }
@@ -68,11 +72,14 @@ impl MLP {
     }
 
     fn forward(&self, x: Vec<Expr>) -> Vec<Expr> {
+        for layer in &self.layers.iter() {
+            x = layer.forward(x);
+        }
         let mut y = x;
         for layer in &self.layers {
             y = layer.forward(y);
         }
-        y.clone()
+        y
     }
 }
 
@@ -162,20 +169,34 @@ mod tests {
             LeafExpr::new(1.0),
         ];
 
-        let predicted = inputs
+        let predicted_1 = inputs
             .iter()
             .map(|x| mlp.forward(x.clone()))
             .map(|x| x[0].clone())
             .collect::<Vec<_>>();
 
-        let mut loss = predicted
+        let mut loss_1 = predicted_1
             .iter()
             .zip(targets.iter())
-            .map(|(p, t)| (p.clone() - t.clone()).powi(2))
+            .map(|(p, t)| (p - t).pow(2))
             .sum::<Expr>();
 
-        // loss.reset_grads();
-        loss.backpropagate();
-        // loss.learn_grads(0.1);
+        loss_1.reset_grads();
+        loss_1.backpropagate();
+        loss_1.learn_grads(0.1);
+
+        let predicted_2 = inputs
+            .iter()
+            .map(|x| mlp.forward(x.clone()))
+            .map(|x| x[0].clone())
+            .collect::<Vec<_>>();
+
+        let loss_2 = predicted_2
+            .iter()
+            .zip(targets.iter())
+            .map(|(p, t)| (p - t).pow(2))
+            .sum::<Expr>();
+
+        assert!(loss_2.data() < loss_1.data(), "Loss should decrease");
     }
 }
