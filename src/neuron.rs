@@ -1,9 +1,9 @@
-use crate::value::{Expr, LeafExpr};
+use crate::value::Expr;
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
 
 struct Neuron {
-    w: Vec<f64>,
-    b: f64,
+    w: Vec<Expr>,
+    b: Expr,
 }
 
 struct Layer {
@@ -19,8 +19,8 @@ impl Neuron {
         let between = Uniform::new_inclusive(-1.0, 1.0);
         let mut rng = thread_rng();
         Neuron {
-            w: (0..n_inputs).map(|_| between.sample(&mut rng)).collect(),
-            b: between.sample(&mut rng),
+            w: (0..n_inputs).map(|_| between.sample(&mut rng)).map(Expr::new_leaf).collect(),
+            b: Expr::new_leaf(between.sample(&mut rng)),
         }
     }
 
@@ -31,13 +31,13 @@ impl Neuron {
             "Number of inputs must match number of weights"
         );
 
-        let mut sum = LeafExpr::new(0.0);
+        let mut sum = Expr::new_leaf(0.0);
 
         for (i, x_i) in x.iter().enumerate() {
-            sum = sum + (x_i.clone() * self.w[i]);
+            sum = sum + (x_i.clone() * self.w[i].clone());
         }
 
-        let activation = sum + self.b;
+        let activation = sum + self.b.clone();
         activation.tanh()
     }
 }
@@ -72,7 +72,7 @@ impl MLP {
         for layer in &self.layers {
             y = layer.forward(y);
         }
-        y.clone()
+        y
     }
 }
 
@@ -86,7 +86,7 @@ mod tests {
 
         assert_eq!(n.w.len(), 3);
         for i in 0..3 {
-            assert!(n.w[i] >= -1.0 && n.w[i] <= 1.0);
+            assert!(n.w[i].result >= -1.0 && n.w[i].result <= 1.0);
         }
     }
 
@@ -94,7 +94,7 @@ mod tests {
     fn can_do_forward_pass_neuron() {
         let n = Neuron::new(3);
 
-        let x = vec![LeafExpr::new(0.0), LeafExpr::new(1.0), LeafExpr::new(2.0)];
+        let x = vec![Expr::new_leaf(0.0), Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 
         let _ = n.forward(x);
     }
@@ -111,7 +111,7 @@ mod tests {
     fn can_do_forward_pass_layer() {
         let l = Layer::new(3, 2);
 
-        let x = vec![LeafExpr::new(0.0), LeafExpr::new(1.0), LeafExpr::new(2.0)];
+        let x = vec![Expr::new_leaf(0.0), Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 
         let y = l.forward(x);
 
@@ -137,7 +137,7 @@ mod tests {
     fn can_do_forward_pass_mlp() {
         let m = MLP::new(3, vec![2, 2], 1);
 
-        let x = vec![LeafExpr::new(0.0), LeafExpr::new(1.0), LeafExpr::new(2.0)];
+        let x = vec![Expr::new_leaf(0.0), Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 
         let y = m.forward(x);
 
@@ -148,34 +148,60 @@ mod tests {
     fn can_learn() {
         let mlp = MLP::new(3, vec![2, 2], 1);
 
-        let inputs = vec![
-            vec![LeafExpr::new(2.0), LeafExpr::new(3.0), LeafExpr::new(-1.0)],
-            vec![LeafExpr::new(3.0), LeafExpr::new(-1.0), LeafExpr::new(0.5)],
-            vec![LeafExpr::new(0.5), LeafExpr::new(1.0), LeafExpr::new(1.0)],
-            vec![LeafExpr::new(1.0), LeafExpr::new(1.0), LeafExpr::new(-1.0)],
+        let mut inputs = vec![
+            vec![Expr::new_leaf(2.0), Expr::new_leaf(3.0), Expr::new_leaf(-1.0)],
+            vec![Expr::new_leaf(3.0), Expr::new_leaf(-1.0), Expr::new_leaf(0.5)],
+            vec![Expr::new_leaf(0.5), Expr::new_leaf(1.0), Expr::new_leaf(1.0)],
+            vec![Expr::new_leaf(1.0), Expr::new_leaf(1.0), Expr::new_leaf(-1.0)],
         ];
 
-        let targets = vec![
-            LeafExpr::new(1.0),
-            LeafExpr::new(-1.0),
-            LeafExpr::new(-1.0),
-            LeafExpr::new(1.0),
+        // make these non-learnable
+        inputs.iter_mut().for_each(|instance| 
+            instance.iter_mut().for_each(|input| 
+                input.set_learnable(false)
+            )
+        );
+
+        let mut targets = vec![
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(-1.0),
+            Expr::new_leaf(-1.0),
+            Expr::new_leaf(1.0),
         ];
+        // make these non-learnable
+        targets.iter_mut().for_each(|target| target.set_learnable(false));
 
         let predicted = inputs
             .iter()
             .map(|x| mlp.forward(x.clone()))
+            // n_outputs == 1 so we want the only output neuron
             .map(|x| x[0].clone())
             .collect::<Vec<_>>();
 
+        // calculating loss: MSE
         let mut loss = predicted
             .iter()
             .zip(targets.iter())
-            .map(|(p, t)| (p.clone() - t.clone()).powi(2))
+            .map(|(p, t)| {
+                let mut diff = p.clone() - t.clone();
+                diff.set_learnable(false);
+
+                let mut squared_exponent = Expr::new_leaf(2.0);
+                squared_exponent.set_learnable(false);
+
+                let mut mse = diff.clone().pow(squared_exponent);
+                mse.set_learnable(false);
+
+                mse
+            })
             .sum::<Expr>();
 
-        // loss.reset_grads();
-        loss.backpropagate();
-        // loss.learn_grads(0.1);
+        loss.grad = 1.0;
+        let first_loss = loss.result.clone();
+        loss.learn(1e-04);
+        loss.recalculate();
+        let second_loss = loss.result.clone();
+
+        assert!(second_loss < first_loss, "Loss should decrease after learning ({} >= {})", second_loss, first_loss);
     }
 }
