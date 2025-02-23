@@ -10,14 +10,15 @@ enum Operation {
     Div,
     Tanh,
     Exp,
-    Pow
+    Pow,
+    ReLU,
 }
 
 impl Operation {
     fn assert_is_type(&self, expr_type: ExprType) {
         match self {
             Operation::None => assert_eq!(expr_type, ExprType::Leaf),
-            Operation::Tanh | Operation::Exp => assert_eq!(expr_type, ExprType::Unary),
+            Operation::Tanh | Operation::Exp | Operation::ReLU => assert_eq!(expr_type, ExprType::Unary),
             _ => assert_eq!(expr_type, ExprType::Binary),
         }
     }
@@ -55,7 +56,7 @@ impl Expr {
     fn expr_type(&self) -> ExprType {
         match self.operation {
             Operation::None => ExprType::Leaf,
-            Operation::Tanh | Operation::Exp => ExprType::Unary,
+            Operation::Tanh | Operation::Exp | Operation::ReLU => ExprType::Unary,
             _ => ExprType::Binary,
         }
     }
@@ -93,6 +94,11 @@ impl Expr {
         Expr::new_unary(self, Operation::Tanh, result)
     }
 
+    pub fn relu(self) -> Expr {
+        let result = self.result.max(0.0);
+        Expr::new_unary(self, Operation::ReLU, result)
+    }
+
     pub fn exp(self) -> Expr {
         let result = self.result.exp();
         Expr::new_unary(self, Operation::Exp, result)
@@ -117,6 +123,7 @@ impl Expr {
                 self.result = match self.operation {
                     Operation::Tanh => operand1.result.tanh(),
                     Operation::Exp => operand1.result.exp(),
+                    Operation::ReLU => operand1.result.max(0.0),
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 };
             }
@@ -152,6 +159,9 @@ impl Expr {
                     }
                     Operation::Exp => {
                         operand1.grad = self.grad * self.result;
+                    }
+                    Operation::ReLU => {
+                        operand1.grad = self.grad * if self.result > 0.0 { 1.0 } else { 0.0 };
                     }
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 }
@@ -405,6 +415,29 @@ mod tests {
     }
 
     #[test]
+    fn test_relu() {
+        // negative case
+        let expr = Expr::new_leaf(-1.0);
+        let expr2 = expr.relu();
+
+        assert_eq!(expr2.result, 0.0);
+        assert!(expr2.operand1.is_some());
+        assert_eq!(expr2.operand1.unwrap().result, -1.0);
+        assert_eq!(expr2.operation, Operation::ReLU);
+        assert!(expr2.operand2.is_none());
+
+        // positive case
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.relu();
+
+        assert_eq!(expr2.result, 1.0);
+        assert!(expr2.operand1.is_some());
+        assert_eq!(expr2.operand1.unwrap().result, 1.0);
+        assert_eq!(expr2.operation, Operation::ReLU);
+        assert!(expr2.operand2.is_none());
+    }
+
+    #[test]
     fn test_pow() {
         let expr = Expr::new_leaf(2.0);
         let expr2 = Expr::new_leaf(3.0);
@@ -636,6 +669,18 @@ mod tests {
 
         let operand1 = expr2.operand1.unwrap();
         assert_eq!(operand1.grad, 2.0);
+    }
+
+    #[test]
+    fn test_backpropagation_relu() {
+        let operand1 = Expr::new_leaf(-1.0);
+        let mut expr2 = operand1.relu();
+
+        expr2.grad = 2.0;
+        expr2.learn(1e-09);
+
+        let operand1 = expr2.operand1.unwrap();
+        assert_eq!(operand1.grad, 0.0);
     }
 
     #[test]
