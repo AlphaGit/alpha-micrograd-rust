@@ -1,7 +1,17 @@
 [package]
 name = "alpha-micrograd-rust"
+authors = ["Alpha"]
 version = "0.1.0"
 edition = "2021"
+description = "Expression tree, automatic gradients, neural networks, layers and perceptrons."
+readme = "README.md"
+repostitory = "https://github.com/AlphaGit/alpha-micrograd-rust/"
+license = "MIT"
+keywords = ["neural-networks", "perceptrons", "layers", "expression-tree"]
+categories = ["data-structures", "science"]
 
 [dependencies]
 rand = "0.8.5"
+
+[badges]
+maintenance = { status = "experimental" }
