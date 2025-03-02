@@ -6,7 +6,7 @@
 /// Contrast this example with the `layer` example.
 extern crate alpha_micrograd_rust;
 
-use alpha_micrograd_rust::neuron::{Activation, Neuron};
+use alpha_micrograd_rust::nn::{Activation, Neuron};
 use alpha_micrograd_rust::value::Expr;
 
 fn main() {

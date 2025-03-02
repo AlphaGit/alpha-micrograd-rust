@@ -7,7 +7,7 @@
 /// The target values are fixed and not learned.
 extern crate alpha_micrograd_rust;
 
-use alpha_micrograd_rust::neuron::{Activation, MLP};
+use alpha_micrograd_rust::nn::{Activation, MLP};
 use alpha_micrograd_rust::value::Expr;
 
 fn main() {
