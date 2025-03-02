@@ -1,2 +1,2 @@
-mod neuron;
-mod value;
+pub mod value;
+pub mod neuron;

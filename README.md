@@ -17,11 +17,11 @@ You can construct values that get added into a tree structure automatically.
 In this example we model the function `tanh(x1 * w1 + x2 * w2 + b)`, which might as well be a simple neuron.
 
 ```rust
-let x1 = Expr::new_leaf(2.0);
-let x2 = Expr::new_leaf(0.0);
-let w1 = Expr::new_leaf(-3.0);
-let w2 = Expr::new_leaf(1.0);
-let b = Expr::new_leaf(6.8813735870195432);
+let x1 = Expr::new_leaf(2.0, "x1");
+let x2 = Expr::new_leaf(0.0, "x2");
+let w1 = Expr::new_leaf(-3.0, "w1");
+let w2 = Expr::new_leaf(1.0, "w2");
+let b = Expr::new_leaf(6.8813735870195432, "b");
 ```
 
 As you can see, each value is represented by an `Expr` struct, which holds the value and the internal gradient required for backpropagation (to be seen later on).
@@ -38,7 +38,7 @@ let n = x1w1_x2w2 + b;
 Or you can use helper functions already embedded in the `Expr` struct:
 
 ```rust
-let mut o = n.tanh();
+let mut o = n.tanh("output");
 ```
 
 For simplicity of the construction of the in-memory tree, the `Expr` values are owned by the new `Expr` values created by the operations. This means that you can't use the same `Expr` value in different branches of the tree as of right now.
@@ -58,10 +58,10 @@ let lr = 0.001; // learning rate
 o.learn(lr);
 ```
 
-Maybe some parameters (like inputs, loss functions) should not be learnable, so you can set the `learnable` flag to `false`:
+Maybe some parameters (like inputs, loss functions) should not be learnable, so you can set the `is_learnable` flag to `false`:
 
 ```rust
-x1.set_learnable(false);
+x1.is_learneable = false;
 ```
 
 ### Available operations
@@ -81,7 +81,7 @@ For your convience, you can create a `Neuron` struct that holds the weights and 
 
 ```rust
 let mut n = Neuron::new(2); // 2 inputs
-let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
+let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = n.forward(x);
 ```
 
@@ -89,7 +89,7 @@ Similarly, you can declare a single Layer of neurons:
 
 ```rust
 let mut l = Layer::new(2, 3); // 2 inputs, 3 neurons
-let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
+let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = l.forward(x);
 ```
 
@@ -97,7 +97,7 @@ And a multi-layer perceptron:
 
 ```rust
 let mut mlp = MLP::new(2, vec![3, 3], 1); // 2 inputs, 3 neurons in the hidden layer, 1 output
-let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
+let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = mlp.forward(x);
 ```
 
@@ -105,11 +105,11 @@ You can tie it all together by setting up a loss function and backpropagating th
 
 ```rust
 let mut mlp = MLP::new(2, vec![3, 3], 1); // 2 inputs, 3 neurons in the hidden layer, 1 output
-let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
+let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = mlp.forward(x);
 
-let target = Expr::new_leaf(0.0);
-let loss = (y[0] - target).pow(2.0);
+let target = Expr::new_leaf(0.0, "target");
+let loss = (y[0] - target).pow(2.0, "loss");
 loss.grad = 1.0;
 loss.learn(0.001);
 ```
