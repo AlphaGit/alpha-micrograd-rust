@@ -6,7 +6,7 @@
 //! - MLP: multilayer-perceptron, a collection of layers and activation function
 //! 
 //! All of them have a `forward` method to calculate the output of the element.
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 use std::fmt::Display;
 use crate::value::Expr;
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
@@ -328,7 +328,6 @@ mod tests {
             })
             .sum::<Expr>();
 
-        loss.grad = 1.0;
         let first_loss = loss.result.clone();
         loss.learn(1e-04);
         loss.recalculate();

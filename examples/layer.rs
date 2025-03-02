@@ -55,7 +55,6 @@ fn main() {
     println!("\nTraining:");
     let learning_rate = 0.004;
     for i in 1..=100 {
-        loss.grad = 1.0;
         loss.learn(learning_rate);
         loss.recalculate();
 

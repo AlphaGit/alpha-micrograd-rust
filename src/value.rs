@@ -2,7 +2,7 @@
 //! 
 //! This package includes the following elements to construct expression trees:
 //! - `Expr`: a node in the expression tree
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
 
@@ -54,8 +54,7 @@ pub struct Expr {
     pub result: f64,
     /// Whether the expression is learnable or not. Only learnable `Expr` will have their values updated during backpropagation (learning).
     pub is_learnable: bool,
-    /// The gradient of the expression, only calculated for backpropagation.
-    pub grad: f64,
+    grad: f64,
     /// The name of the expression, used to identify it in the calculation graph.
     pub name: String,
 }
@@ -173,8 +172,7 @@ impl Expr {
     /// gradients and the expression itself.
     /// 
     /// This method will change the gradients based on the gradient of the last
-    /// expression in the calculation graph. Usually, you'll want to set the
-    /// last gradient as 1.0, meaning that you're calculating a direct loss function.
+    /// expression in the calculation graph.
     /// 
     /// Example:
     /// 
@@ -183,8 +181,6 @@ impl Expr {
     /// 
     /// let expr = Expr::new_leaf(1.0, "x");
     /// let mut expr2 = expr.tanh("tanh(x)");
-    /// // calculate the gradient of the expression tree
-    /// expr2.grad = 1.0;
     /// expr2.learn(1e-09);
     /// ```
     /// 
@@ -194,6 +190,11 @@ impl Expr {
     /// In order to get a new calculation of the expression tree, you'll need to call
     /// `recalculate` after calling `learn`.
     pub fn learn(&mut self, learning_rate: f64) {
+        self.grad = 1.0;
+        self.learn_internal(learning_rate);
+    }
+
+    fn learn_internal(&mut self, learning_rate: f64) {
         match self.expr_type() {
             ExprType::Leaf => {
                 // leaves have their gradient set externally by other nodes in the tree
@@ -219,7 +220,7 @@ impl Expr {
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 }
 
-                operand1.learn(learning_rate);
+                operand1.learn_internal(learning_rate);
             }
             ExprType::Binary => {
                 let operand1 = self.operand1.as_mut().expect("Binary expression did not have an operand");
@@ -258,8 +259,8 @@ impl Expr {
                     _ => panic!("Invalid binary operation: {:?}", self.operation),
                 }
 
-                operand1.learn(learning_rate);
-                operand2.learn(learning_rate);
+                operand1.learn_internal(learning_rate);
+                operand2.learn_internal(learning_rate);
             }
         }
     }
@@ -724,13 +725,12 @@ mod tests {
         let operand2 = Expr::new_leaf(2.0, "y");
         let mut expr3 = operand1 + operand2;
 
-        expr3.grad = 2.0;
         expr3.learn(1e-09);
 
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
-        assert_eq!(operand1.grad, 2.0);
-        assert_eq!(operand2.grad, 2.0);
+        assert_eq!(operand1.grad, 1.0);
+        assert_eq!(operand2.grad, 1.0);
     }
 
     #[test]
@@ -739,13 +739,12 @@ mod tests {
         let operand2 = Expr::new_leaf(2.0, "y");
         let mut expr3 = operand1 - operand2;
 
-        expr3.grad = 2.0;
         expr3.learn(1e-09);
 
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
-        assert_eq!(operand1.grad, 2.0);
-        assert_eq!(operand2.grad, -2.0);
+        assert_eq!(operand1.grad, 1.0);
+        assert_eq!(operand2.grad, -1.0);
     }
 
     #[test]
@@ -754,13 +753,12 @@ mod tests {
         let operand2 = Expr::new_leaf(4.0, "y");
         let mut expr3 = operand1 * operand2;
 
-        expr3.grad = 2.0;
         expr3.learn(1e-09);
 
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
-        assert_eq!(operand1.grad, 8.0);
-        assert_eq!(operand2.grad, 6.0);
+        assert_eq!(operand1.grad, 4.0);
+        assert_eq!(operand2.grad, 3.0);
     }
 
     #[test]
@@ -769,13 +767,12 @@ mod tests {
         let operand2 = Expr::new_leaf(4.0, "y");
         let mut expr3 = operand1 / operand2;
 
-        expr3.grad = 2.0;
         expr3.learn(1e-09);
 
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
-        assert_eq!(operand1.grad, 0.5);
-        assert_eq!(operand2.grad, -0.375);
+        assert_eq!(operand1.grad, 0.25);
+        assert_eq!(operand2.grad, -0.1875);
     }
 
     #[test]
@@ -783,11 +780,10 @@ mod tests {
         let operand1 = Expr::new_leaf(0.0, "x");
         let mut expr2 = operand1.tanh("tanh(x)");
 
-        expr2.grad = 2.0;
         expr2.learn(1e-09);
 
         let operand1 = expr2.operand1.unwrap();
-        assert_eq!(operand1.grad, 2.0);
+        assert_eq!(operand1.grad, 1.0);
     }
 
     #[test]
@@ -795,7 +791,6 @@ mod tests {
         let operand1 = Expr::new_leaf(-1.0, "x");
         let mut expr2 = operand1.relu("relu(x)");
 
-        expr2.grad = 2.0;
         expr2.learn(1e-09);
 
         let operand1 = expr2.operand1.unwrap();
@@ -807,11 +802,10 @@ mod tests {
         let operand1 = Expr::new_leaf(0.0, "x");
         let mut expr2 = operand1.exp("exp(x)");
 
-        expr2.grad = 2.0;
         expr2.learn(1e-09);
 
         let operand1 = expr2.operand1.unwrap();
-        assert_eq!(operand1.grad, 2.0);
+        assert_eq!(operand1.grad, 1.0);
     }
 
     #[test]
@@ -820,13 +814,12 @@ mod tests {
         let operand2 = Expr::new_leaf(3.0, "y");
         let mut expr3 = operand1.pow(operand2, "x^y");
 
-        expr3.grad = 2.0;
         expr3.learn(1e-09);
 
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
-        assert_eq!(operand1.grad, 24.0);
-        assert_eq!(operand2.grad, 11.090354888959125);
+        assert_eq!(operand1.grad, 12.0);
+        assert_eq!(operand2.grad, 5.545177444479562);
     }
 
     #[test]
@@ -836,16 +829,15 @@ mod tests {
         let expr3 = operand1 + operand2;
         let mut expr4 = expr3.tanh("tanh(x + y)");
 
-        expr4.grad = 2.0;
         expr4.learn(1e-09);
 
         let expr3 = expr4.operand1.unwrap();
         let operand1 = expr3.operand1.unwrap();
         let operand2 = expr3.operand2.unwrap();
 
-        assert_eq!(expr3.grad, 0.019732074330880423);
-        assert_eq!(operand1.grad, 0.019732074330880423);
-        assert_eq!(operand2.grad, 0.019732074330880423);
+        assert_eq!(expr3.grad, 0.009866037165440211);
+        assert_eq!(operand1.grad, 0.009866037165440211);
+        assert_eq!(operand2.grad, 0.009866037165440211);
     }
 
     #[test]
@@ -862,7 +854,6 @@ mod tests {
         let n = x1w1_x2w2 + b;
         let mut o = n.tanh("tanh(n)");
 
-        o.grad = 1.0;
         o.learn(1e-09);
 
         assert_eq!(o.operation, Operation::Tanh);
@@ -908,7 +899,6 @@ mod tests {
     #[test]
     fn test_learn_simple() {
         let mut expr = Expr::new_leaf(1.0, "x");
-        expr.grad = 1.0;
         expr.learn(1e-01);
 
         assert_float_eq(expr.result, 0.9);
@@ -918,7 +908,6 @@ mod tests {
     fn test_learn_skips_non_learnable() {
         let mut expr = Expr::new_leaf(1.0, "x");
         expr.is_learnable = false;
-        expr.grad = 1.0;
         expr.learn(1e-01);
 
         assert_float_eq(expr.result, 1.0);
