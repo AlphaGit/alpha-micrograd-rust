@@ -17,6 +17,8 @@ You can construct values that get added into a tree structure automatically.
 In this example we model the function `tanh(x1 * w1 + x2 * w2 + b)`, which might as well be a simple neuron.
 
 ```rust
+use alpha_micrograd_rust::value::Expr;
+
 let x1 = Expr::new_leaf(2.0, "x1");
 let x2 = Expr::new_leaf(0.0, "x2");
 let w1 = Expr::new_leaf(-3.0, "w1");
@@ -29,6 +31,14 @@ As you can see, each value is represented by an `Expr` struct, which holds the v
 Values can be combined in an ergonomic approach:
 
 ```rust
+use alpha_micrograd_rust::value::Expr;
+
+let x1 = Expr::new_leaf(2.0, "x1");
+let x2 = Expr::new_leaf(0.0, "x2");
+let w1 = Expr::new_leaf(-3.0, "w1");
+let w2 = Expr::new_leaf(1.0, "w2");
+let b = Expr::new_leaf(6.8813735870195432, "b");
+
 let x1w1 = x1 * w1;
 let x2w2 = x2 * w2;
 let x1w1_x2w2 = x1w1 + x2w2;
@@ -38,7 +48,10 @@ let n = x1w1_x2w2 + b;
 Or you can use helper functions already embedded in the `Expr` struct:
 
 ```rust
-let mut o = n.tanh("output");
+use alpha_micrograd_rust::value::Expr;
+
+let x1 = Expr::new_leaf(2.0, "x1");
+let mut o = x1.tanh("output");
 ```
 
 For simplicity of the construction of the in-memory tree, the `Expr` values are owned by the new `Expr` values created by the operations. This means that you can't use the same `Expr` value in different branches of the tree as of right now.
@@ -46,13 +59,19 @@ For simplicity of the construction of the in-memory tree, the `Expr` values are 
 You can also evaluate the value of the expression:
 
 ```rust
-o.result
+use alpha_micrograd_rust::value::Expr;
+
+let o = Expr::new_leaf(2.0, "x1") + Expr::new_leaf(3.0, "x2");
+println!("{}", o.result)
 ```
 
 But more interestingly, you can backpropagate the gradients and have the learnable parameters be adjusted accordingly:
 
 ```rust
-o.grad = 1.0; // set the gradient of the output to 1.0 because it's the last value of the tree
+use alpha_micrograd_rust::value::Expr;
+
+let x1 = Expr::new_leaf(2.0, "x1");
+let mut o = x1.tanh("output");
 
 let lr = 0.001; // learning rate
 o.learn(lr);
@@ -61,7 +80,10 @@ o.learn(lr);
 Maybe some parameters (like inputs, loss functions) should not be learnable, so you can set the `is_learnable` flag to `false`:
 
 ```rust
-x1.is_learneable = false;
+use alpha_micrograd_rust::value::Expr;
+
+let mut x1 = Expr::new_leaf(2.0, "x1");
+x1.is_learnable = false;
 ```
 
 ### Available operations
@@ -80,7 +102,10 @@ x1.is_learneable = false;
 For your convience, you can create a `Neuron` struct that holds the weights and bias of a neuron, and a `Layer` struct that holds a vector of neurons.
 
 ```rust
-let mut n = Neuron::new(2); // 2 inputs
+use alpha_micrograd_rust::nn::{Neuron, Activation};
+use alpha_micrograd_rust::value::Expr;
+
+let n = Neuron::new(2, Activation::None); // 2 inputs
 let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = n.forward(x);
 ```
@@ -88,7 +113,10 @@ let y = n.forward(x);
 Similarly, you can declare a single Layer of neurons:
 
 ```rust
-let mut l = Layer::new(2, 3); // 2 inputs, 3 neurons
+use alpha_micrograd_rust::nn::{Layer, Activation};
+use alpha_micrograd_rust::value::Expr;
+
+let mut l = Layer::new(2, 2, Activation::None);
 let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = l.forward(x);
 ```
@@ -96,7 +124,14 @@ let y = l.forward(x);
 And a multi-layer perceptron:
 
 ```rust
-let mut mlp = MLP::new(2, vec![3, 3], 1); // 2 inputs, 3 neurons in the hidden layer, 1 output
+use alpha_micrograd_rust::nn::{MLP, Activation};
+use alpha_micrograd_rust::value::Expr;
+
+let mut mlp = MLP::new(
+    2, Activation::Tanh, // input layer
+    vec![2, 2], Activation::Tanh, // hidden layers
+    1, Activation::None, // output layer
+);
 let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
 let y = mlp.forward(x);
 ```
@@ -104,13 +139,20 @@ let y = mlp.forward(x);
 You can tie it all together by setting up a loss function and backpropagating the gradients:
 
 ```rust
-let mut mlp = MLP::new(2, vec![3, 3], 1); // 2 inputs, 3 neurons in the hidden layer, 1 output
+use alpha_micrograd_rust::nn::{MLP, Activation};
+use alpha_micrograd_rust::value::Expr;
+
+let mut mlp = MLP::new(
+    2, Activation::Tanh, // input layer
+    vec![2, 2], Activation::Tanh, // hidden layers
+    1, Activation::None, // output layer
+);
 let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
-let y = mlp.forward(x);
+let mut y = mlp.forward(x);
 
 let target = Expr::new_leaf(0.0, "target");
-let loss = (y[0] - target).pow(2.0, "loss");
-loss.grad = 1.0;
+let exponent = Expr::new_leaf(2.0, "exponent");
+let mut loss = (y.remove(0) - target).pow(exponent, "loss");
 loss.learn(0.001);
 ```
 
