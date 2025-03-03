@@ -1,9 +1,9 @@
 //! A simple implementation of simple neural network's elements.
 //!
 //! This package includes the following elements to construct neural networks:
-//! - Neuron: weight and bias
-//! - Layer: a collection of neurons
-//! - MLP: multilayer-perceptron, a collection of layers and activation function
+//! - [`Neuron`]: weight and bias
+//! - [`Layer`]: a collection of neurons
+//! - [`MLP`]: multilayer-perceptron, a collection of layers and activation function
 //! 
 //! All of them have a `forward` method to calculate the output of the element.
 #![deny(missing_docs)]
@@ -23,7 +23,7 @@ pub struct Neuron {
 
 /// A layer in a neural network.
 /// 
-/// A layer is a collection of neurons. It calculates the output of each neuron in the layer.
+/// A layer is a collection of [`Neuron`s](Neuron). It calculates the output of each neuron in the layer.
 /// The output of the layer is the collection of the outputs of the neurons.
 pub struct Layer {
     neurons: Vec<Neuron>,
@@ -31,7 +31,7 @@ pub struct Layer {
 
 /// A multilayer perceptron.
 /// 
-/// A multilayer perceptron is a collection of layers. It calculates the output of each layer
+/// A multilayer perceptron is a collection of [`Layer`s](Layer). It calculates the output of each layer
 /// and passes it to the next layer.
 /// The output of the MLP is the output of the last layer.
 pub struct MLP {
@@ -45,14 +45,14 @@ pub struct MLP {
 pub enum Activation {
     /// No activation function.
     None,
-    /// Rectified Linear Unit (ReLU).
+    /// Rectified Linear Unit ([`Expr::relu`]).
     ReLU,
-    /// Hyperbolic Tangent (tanh).
+    /// Hyperbolic Tangent ([`Expr::tanh`]).
     Tanh,
 }
 
 impl Neuron {
-    /// Create a new neuron with `n_inputs` inputs.
+    /// Create a new [`Neuron`] with `n_inputs` inputs.
     ///
     /// The weights and bias are initialized randomly from a uniform distribution between -1 and 1.
     /// 
@@ -114,9 +114,9 @@ impl Display for Neuron {
 }
 
 impl Layer {
-    /// Create a new layer with `n_inputs` to the neurons and `n_outputs` neurons.
+    /// Create a new [`Layer`] with `n_inputs` to the neurons and `n_outputs` neurons.
     ///
-    /// The layer is a collection of neurons. The number of neurons is `n_outputs`.
+    /// The layer is a collection of [`neuron`s](Neuron). The number of neurons is `n_outputs`.
     /// Each neuron has `n_inputs` inputs.
     pub fn new(n_inputs: u32, n_outputs: u32, activation: Activation) -> Layer {
         Layer {
@@ -144,9 +144,9 @@ impl Display for Layer {
 }
 
 impl MLP {
-    /// Create a new multilayer perceptron with the given number of inputs, hidden layers, and outputs.
+    /// Create a new multilayer perceptron ([`MLP`]) with the given number of inputs, hidden layers, and outputs.
     ///
-    /// The MLP is a collection of layers. The total number of layers is `n_hidden.len() + 2`.
+    /// The [`MLP`] is a collection of [`Layer`s](Layer). The total number of layers is `n_hidden.len() + 2`.
     /// The first layer has `n_inputs` inputs and `n_hidden[0]` neurons.
     /// The hidden layer `i` has `n_hidden[i]` neurons. There are `n_hidden.len()` hidden layers.
     /// The last layer has `n_hidden[n_hidden.len() - 1]` inputs and `n_outputs` neurons.

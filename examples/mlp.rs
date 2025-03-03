@@ -5,6 +5,8 @@
 /// Contrast this example with the `neuron` example.
 /// The network is trained on 3 examples, each with 3 input values and 1 target value.
 /// The target values are fixed and not learned.
+/// 
+/// For more information, see [`MLP`].
 extern crate alpha_micrograd_rust;
 
 use alpha_micrograd_rust::nn::{Activation, MLP};

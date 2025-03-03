@@ -6,6 +6,8 @@
 ///
 /// We will only allow the values of `w1`, `w2` and `b` to be learned to reach a fixed
 /// target value.
+/// 
+/// For more information, see [`Expr`].
 extern crate alpha_micrograd_rust;
 
 use alpha_micrograd_rust::value::Expr;

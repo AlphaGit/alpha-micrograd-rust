@@ -4,6 +4,8 @@
 /// The layer has three inputs and one output. The output is the weighted sum of the inputs.
 ///
 /// Contrast this example with the `neuron` example.
+/// 
+/// For more information, see [`Layer`].
 extern crate alpha_micrograd_rust;
 
 use alpha_micrograd_rust::nn::{Activation, Layer};

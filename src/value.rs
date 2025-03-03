@@ -1,7 +1,7 @@
 //! A simple library for creating and backpropagating through expression trees.
 //! 
 //! This package includes the following elements to construct expression trees:
-//! - `Expr`: a node in the expression tree
+//! - [`Expr`]: a node in the expression tree
 #![deny(missing_docs)]
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
@@ -52,7 +52,7 @@ pub struct Expr {
     operation: Operation,
     /// The numeric result of the expression, as result of applying the operation to the operands.
     pub result: f64,
-    /// Whether the expression is learnable or not. Only learnable `Expr` will have their values updated during backpropagation (learning).
+    /// Whether the expression is learnable or not. Only learnable [`Expr`] will have their values updated during backpropagation (learning).
     pub is_learnable: bool,
     grad: f64,
     /// The name of the expression, used to identify it in the calculation graph.
@@ -61,6 +61,13 @@ pub struct Expr {
 
 impl Expr {
     /// Creates a new leaf expression with the given value.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// ```
     pub fn new_leaf(value: f64, name: &str) -> Expr {
         Expr {
             operand1: None,
@@ -108,24 +115,65 @@ impl Expr {
     }
 
     /// Applies the hyperbolic tangent function to the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr2 = expr.tanh("tanh");
+    /// 
+    /// println!("Result: {}", expr2.result); // 0.7615941559557649
+    /// ```
     pub fn tanh(self, name: &str) -> Expr {
         let result = self.result.tanh();
         Expr::new_unary(self, Operation::Tanh, result, name)
     }
 
     /// Applies the rectified linear unit function to the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(-1.0, "x");
+    /// let expr2 = expr.relu("relu");
+    /// 
+    /// println!("Result: {}", expr2.result); // 0.0
+    /// ```
     pub fn relu(self, name: &str) -> Expr {
         let result = self.result.max(0.0);
         Expr::new_unary(self, Operation::ReLU, result, name)
     }
 
     /// Applies the exponential function (e^x) to the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr2 = expr.exp("exp");
+    /// 
+    /// println!("Result: {}", expr2.result); // 2.718281828459045
+    /// ```
     pub fn exp(self, name: &str) -> Expr {
         let result = self.result.exp();
         Expr::new_unary(self, Operation::Exp, result, name)
     }
 
     /// Raises the expression to the power of the given exponent (expression) and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(2.0, "x");
+    /// let exponent = Expr::new_leaf(3.0, "y");
+    /// let result = expr.pow(exponent, "x^y");
+    /// 
+    /// println!("Result: {}", result.result); // 8.0
+    /// ```
     pub fn pow(self, exponent: Expr, name: &str) -> Expr {
         let result = self.result.powf(exponent.result);
         Expr::new_binary(self, exponent, Operation::Pow, result, name)
@@ -133,8 +181,18 @@ impl Expr {
 
     /// Recalculates the value of the expression recursively, from new values of the operands.
     /// 
-    /// Usually will be used after a call to `learn`, where the gradients have been calculated and
+    /// Usually will be used after a call to [`Expr::learn`], where the gradients have been calculated and
     /// the internal values of the expression tree have been updated.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// expr2.learn(1e-09);
+    /// expr2.recalculate();
+    /// ```
     pub fn recalculate(&mut self) {
         match self.expr_type() {
             ExprType::Leaf => {}
@@ -188,7 +246,7 @@ impl Expr {
     /// individual expression tree nodes to minimize the loss function.
     /// 
     /// In order to get a new calculation of the expression tree, you'll need to call
-    /// `recalculate` after calling `learn`.
+    /// [`Expr::recalculate`] after calling [`Expr::learn`].
     pub fn learn(&mut self, learning_rate: f64) {
         self.grad = 1.0;
         self.learn_internal(learning_rate);
@@ -268,7 +326,18 @@ impl Expr {
     /// Finds a node in the expression tree by its name.
     /// 
     /// This method will search the expression tree for a node with the given name.
-    /// If the node is not found, it will return `None`.
+    /// If the node is not found, it will return [None].
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr2 = expr.tanh("tanh(x)");
+    /// let original = expr2.find("x");
+    /// 
+    /// assert_eq!(original.expect("Could not find x").result, 1.0);
+    /// ```
     pub fn find(&self, name: &str) -> Option<&Expr> {
         if self.name == name {
             return Some(self);
@@ -295,7 +364,21 @@ impl Expr {
     }
 }
 
-/// Implements the `Add` trait for the `Expr` struct.
+/// Implements the [`Add`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the addition of two [`Expr`] objects.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr2 = Expr::new_leaf(2.0, "y");
+/// 
+/// let result = expr + expr2;
+/// 
+/// println!("Result: {}", result.result); // 3.0
+/// ```
 impl Add for Expr {
     type Output = Expr;
 
@@ -306,7 +389,19 @@ impl Add for Expr {
     }
 }
 
-/// Implements the `Add` trait for the `Expr` struct, when the right operand is a `f64`.
+/// Implements the [`Add`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the addition of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = expr + 2.0;
+/// 
+/// println!("Result: {}", result.result); // 3.0
+/// ```
 impl Add<f64> for Expr {
     type Output = Expr;
 
@@ -316,7 +411,19 @@ impl Add<f64> for Expr {
     }
 }
 
-/// Implements the `Add` trait for the `f64` type, when the right operand is an `Expr`.
+/// Implements the [`Add`] trait for the [`f64`] type, when the right operand is an [`Expr`].
+/// 
+/// This implementation allows the addition of a [`f64`] value and an [`Expr`] object.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = 2.0 + expr;
+/// 
+/// println!("Result: {}", result.result); // 3.0
+/// ```
 impl Add<Expr> for f64 {
     type Output = Expr;
 
@@ -326,7 +433,22 @@ impl Add<Expr> for f64 {
     }
 }
 
-/// Implements the `Mul` trait for the `Expr` struct.
+/// Implements the [`Mul`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the multiplication of two [`Expr`] objects.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr2 = Expr::new_leaf(2.0, "y");
+/// 
+/// let result = expr * expr2;
+/// 
+/// println!("Result: {}", result.result); // 2.0
+/// ```
 impl Mul for Expr {
     type Output = Expr;
 
@@ -337,7 +459,20 @@ impl Mul for Expr {
     }
 }
 
-/// Implements the `Mul` trait for the `Expr` struct, when the right operand is a `f64`.
+/// Implements the [`Mul`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the multiplication of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = expr * 2.0;
+/// 
+/// println!("Result: {}", result.result); // 2.0
+/// ```
 impl Mul<f64> for Expr {
     type Output = Expr;
 
@@ -347,7 +482,20 @@ impl Mul<f64> for Expr {
     }
 }
 
-/// Implements the `Mul` trait for the `f64` type, when the right operand is an `Expr`.
+/// Implements the [`Mul`] trait for the [`f64`] type, when the right operand is an [`Expr`].
+/// 
+/// This implementation allows the multiplication of a [`f64`] value and an [`Expr`] object.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = 2.0 * expr;
+/// 
+/// println!("Result: {}", result.result); // 2.0
+/// ```
 impl Mul<Expr> for f64 {
     type Output = Expr;
 
@@ -357,7 +505,22 @@ impl Mul<Expr> for f64 {
     }
 }
 
-/// Implements the `Sub` trait for the `Expr` struct.
+/// Implements the [`Sub`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the subtraction of two [`Expr`] objects.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr2 = Expr::new_leaf(2.0, "y");
+/// 
+/// let result = expr - expr2;
+/// 
+/// println!("Result: {}", result.result); // -1.0
+/// ```
 impl Sub for Expr {
     type Output = Expr;
 
@@ -368,7 +531,20 @@ impl Sub for Expr {
     }
 }
 
-/// Implements the `Sub` trait for the `Expr` struct, when the right operand is a `f64`.
+/// Implements the [`Sub`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the subtraction of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = expr - 2.0;
+/// 
+/// println!("Result: {}", result.result); // -1.0
+/// ```
 impl Sub<f64> for Expr {
     type Output = Expr;
 
@@ -378,7 +554,20 @@ impl Sub<f64> for Expr {
     }
 }
 
-/// Implements the `Sub` trait for the `f64` type, when the right operand is an `Expr`.
+/// Implements the [`Sub`] trait for the [`f64`] type, when the right operand is an [`Expr`].
+/// 
+/// This implementation allows the subtraction of a [`f64`] value and an [`Expr`] object.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = 2.0 - expr;
+/// 
+/// println!("Result: {}", result.result); // 1.0
+/// ```
 impl Sub<Expr> for f64 {
     type Output = Expr;
 
@@ -388,7 +577,22 @@ impl Sub<Expr> for f64 {
     }
 }
 
-/// Implements the `Div` trait for the `Expr` struct.
+/// Implements the [`Div`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the division of two [`Expr`] objects.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr2 = Expr::new_leaf(2.0, "y");
+/// 
+/// let result = expr / expr2;
+/// 
+/// println!("Result: {}", result.result); // 0.5
+/// ```
 impl Div for Expr {
     type Output = Expr;
 
@@ -399,7 +603,20 @@ impl Div for Expr {
     }
 }
 
-/// Implements the `Div` trait for the `Expr` struct, when the right operand is a `f64`.
+/// Implements the [`Div`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the division of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let result = expr / 2.0;
+/// 
+/// println!("Result: {}", result.result); // 0.5
+/// ```
 impl Div<f64> for Expr {
     type Output = Expr;
 
@@ -409,12 +626,26 @@ impl Div<f64> for Expr {
     }
 }
 
-/// Implements the `Sum` trait for the `Expr` struct.
+/// Implements the [`Sum`] trait for the [`Expr`] struct.
 /// 
-/// Note that this implementation will generate temporary `Expr` objects,
-/// which may not be the most efficient way to sum a collection of `Expr` objects.
-/// However, it is provided as a convenience method for users that want to use the `sum`
-/// over an `Iterator<Expr>`.
+/// Note that this implementation will generate temporary [`Expr`] objects,
+/// which may not be the most efficient way to sum a collection of [`Expr`] objects.
+/// However, it is provided as a convenience method for users that want to use sum
+/// over an [`Iterator<Expr>`].
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::value::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr2 = Expr::new_leaf(2.0, "y");
+/// let expr3 = Expr::new_leaf(3.0, "z");
+/// 
+/// let sum = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
+/// 
+/// println!("Result: {}", sum.result); // 6.0
+/// ```
 impl Sum for Expr {
     fn sum<I>(iter: I) -> Self
     where

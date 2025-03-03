@@ -1,7 +1,7 @@
-/// This example demonstrates how to perform basic operations on `Expr` objects.
-/// The example calculates the squared difference between two `Expr` objects.
-/// The `Expr` objects are created using the `new_leaf` function.
-/// The squared difference is calculated using the `pow` method.
+/// This example demonstrates how to perform basic operations on [`Expr`] objects.
+/// The example calculates the squared difference between two [`Expr`] objects.
+/// The [`Expr`] objects are created using the [`Expr::new_leaf`] function.
+/// The squared difference is calculated using the [`Expr::pow`] method.
 /// The result is printed to the console.
 extern crate alpha_micrograd_rust;
 

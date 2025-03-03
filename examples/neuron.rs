@@ -4,6 +4,8 @@
 /// The neuron has 3 inputs and 1 output. The output is the weighted sum of the inputs.
 ///
 /// Contrast this example with the `layer` example.
+/// 
+/// For more information, see [`Neuron`].
 extern crate alpha_micrograd_rust;
 
 use alpha_micrograd_rust::nn::{Activation, Neuron};
