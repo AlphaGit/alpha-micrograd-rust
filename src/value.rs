@@ -238,6 +238,8 @@ impl Expr {
                     Operation::Tanh => operand1.result.tanh(),
                     Operation::Exp => operand1.result.exp(),
                     Operation::ReLU => operand1.result.max(0.0),
+                    Operation::Log => operand1.result.ln(),
+                    Operation::Neg => -operand1.result,
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 };
             }
