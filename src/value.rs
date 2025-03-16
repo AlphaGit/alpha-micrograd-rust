@@ -17,13 +17,15 @@ enum Operation {
     Exp,
     Pow,
     ReLU,
+    Log,
+    Neg,
 }
 
 impl Operation {
     fn assert_is_type(&self, expr_type: ExprType) {
         match self {
             Operation::None => assert_eq!(expr_type, ExprType::Leaf),
-            Operation::Tanh | Operation::Exp | Operation::ReLU => assert_eq!(expr_type, ExprType::Unary),
+            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => assert_eq!(expr_type, ExprType::Unary),
             _ => assert_eq!(expr_type, ExprType::Binary),
         }
     }
@@ -83,7 +85,7 @@ impl Expr {
     fn expr_type(&self) -> ExprType {
         match self.operation {
             Operation::None => ExprType::Leaf,
-            Operation::Tanh | Operation::Exp | Operation::ReLU => ExprType::Unary,
+            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => ExprType::Unary,
             _ => ExprType::Binary,
         }
     }
@@ -95,7 +97,7 @@ impl Expr {
             operand2: None,
             operation,
             result,
-            is_learnable: true,
+            is_learnable: false,
             grad: 0.0,
             name: name.to_string(),
         }
@@ -108,7 +110,7 @@ impl Expr {
             operand2: Some(Box::new(operand2)),
             operation,
             result,
-            is_learnable: true,
+            is_learnable: false,
             grad: 0.0,
             name: name.to_string(),
         }
@@ -177,6 +179,38 @@ impl Expr {
     pub fn pow(self, exponent: Expr, name: &str) -> Expr {
         let result = self.result.powf(exponent.result);
         Expr::new_binary(self, exponent, Operation::Pow, result, name)
+    }
+
+    /// Applies the natural logarithm function to the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(2.0, "x");
+    /// let expr2 = expr.log("log");
+    /// 
+    /// println!("Result: {}", expr2.result); // 0.6931471805599453
+    /// ```
+    pub fn log(self, name: &str) -> Expr {
+        let result = self.result.ln();
+        Expr::new_unary(self, Operation::Log, result, name)
+    }
+
+    /// Negates the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr2 = expr.neg("neg");
+    /// 
+    /// println!("Result: {}", expr2.result); // -1.0
+    /// ```
+    pub fn neg(self, name: &str) -> Expr {
+        let result = -self.result;
+        Expr::new_unary(self, Operation::Neg, result, name)
     }
 
     /// Recalculates the value of the expression recursively, from new values of the operands.
@@ -274,6 +308,12 @@ impl Expr {
                     }
                     Operation::ReLU => {
                         operand1.grad = self.grad * if self.result > 0.0 { 1.0 } else { 0.0 };
+                    }
+                    Operation::Log => {
+                        operand1.grad = self.grad / operand1.result;
+                    }
+                    Operation::Neg => {
+                        operand1.grad = -self.grad;
                     }
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 }
@@ -948,6 +988,30 @@ mod tests {
         assert_eq!(expr2.operand2.unwrap().result, 3.0);
         assert_eq!(expr2.operation, Operation::Div);
         assert_eq!(expr2.name, "(x / 3)");
+    }
+
+    #[test]
+    fn test_log() {
+        let expr = Expr::new_leaf(2.0, "x");
+        let expr2 = expr.log("log(x)");
+
+        assert_eq!(expr2.result, 0.6931471805599453);
+        assert!(expr2.operand1.is_some());
+        assert_eq!(expr2.operand1.unwrap().result, 2.0);
+        assert_eq!(expr2.operation, Operation::Log);
+        assert!(expr2.operand2.is_none());
+    }
+
+    #[test]
+    fn test_neg() {
+        let expr = Expr::new_leaf(2.0, "x");
+        let expr2 = expr.neg("neg(x)");
+
+        assert_eq!(expr2.result, -2.0);
+        assert!(expr2.operand1.is_some());
+        assert_eq!(expr2.operand1.unwrap().result, 2.0);
+        assert_eq!(expr2.operation, Operation::Neg);
+        assert!(expr2.operand2.is_none());
     }
 
     #[test]
