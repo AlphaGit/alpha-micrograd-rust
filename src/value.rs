@@ -404,6 +404,35 @@ impl Expr {
             }
         }
     }
+
+    /// Returns the count of nodes (parameters)in the expression tree.
+    /// 
+    /// This method will return the total number of nodes in the expression tree,
+    /// including the root node.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr2 = expr.tanh("tanh(x)");
+    /// 
+    /// assert_eq!(expr2.parameter_count(false), 2);
+    /// assert_eq!(expr2.parameter_count(true), 1);
+    /// ```
+    pub fn parameter_count(&self, learnable_only: bool) -> usize {
+        let mut count = if !self.is_learnable && learnable_only { 0 } else { 1 };
+
+        if let Some(operand1) = self.operand1.as_ref() {
+            count += operand1.parameter_count(learnable_only);
+        }
+
+        if let Some(operand2) = self.operand2.as_ref() {
+            count += operand2.parameter_count(learnable_only);
+        }
+
+        count
+    }
 }
 
 /// Implements the [`Add`] trait for the [`Expr`] struct.
