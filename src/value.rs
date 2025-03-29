@@ -125,7 +125,7 @@ impl Expr {
     /// let expr = Expr::new_leaf(1.0, "x");
     /// let expr2 = expr.tanh("tanh");
     /// 
-    /// println!("Result: {}", expr2.result); // 0.7615941559557649
+    /// assert_eq!(expr2.result, 0.7615941559557649);
     /// ```
     pub fn tanh(self, name: &str) -> Expr {
         let result = self.result.tanh();
@@ -141,7 +141,7 @@ impl Expr {
     /// let expr = Expr::new_leaf(-1.0, "x");
     /// let expr2 = expr.relu("relu");
     /// 
-    /// println!("Result: {}", expr2.result); // 0.0
+    /// assert_eq!(expr2.result, 0.0);
     /// ```
     pub fn relu(self, name: &str) -> Expr {
         let result = self.result.max(0.0);
@@ -157,7 +157,7 @@ impl Expr {
     /// let expr = Expr::new_leaf(1.0, "x");
     /// let expr2 = expr.exp("exp");
     /// 
-    /// println!("Result: {}", expr2.result); // 2.718281828459045
+    /// assert_eq!(expr2.result, 2.718281828459045);
     /// ```
     pub fn exp(self, name: &str) -> Expr {
         let result = self.result.exp();
@@ -174,7 +174,7 @@ impl Expr {
     /// let exponent = Expr::new_leaf(3.0, "y");
     /// let result = expr.pow(exponent, "x^y");
     /// 
-    /// println!("Result: {}", result.result); // 8.0
+    /// assert_eq!(result.result, 8.0);
     /// ```
     pub fn pow(self, exponent: Expr, name: &str) -> Expr {
         let result = self.result.powf(exponent.result);
@@ -190,7 +190,7 @@ impl Expr {
     /// let expr = Expr::new_leaf(2.0, "x");
     /// let expr2 = expr.log("log");
     /// 
-    /// println!("Result: {}", expr2.result); // 0.6931471805599453
+    /// assert_eq!(expr2.result, 0.6931471805599453);
     /// ```
     pub fn log(self, name: &str) -> Expr {
         let result = self.result.ln();
@@ -206,7 +206,7 @@ impl Expr {
     /// let expr = Expr::new_leaf(1.0, "x");
     /// let expr2 = expr.neg("neg");
     /// 
-    /// println!("Result: {}", expr2.result); // -1.0
+    /// assert_eq!(expr2.result, -1.0);
     /// ```
     pub fn neg(self, name: &str) -> Expr {
         let result = -self.result;
@@ -419,7 +419,7 @@ impl Expr {
 /// 
 /// let result = expr + expr2;
 /// 
-/// println!("Result: {}", result.result); // 3.0
+/// assert_eq!(result.result, 3.0);
 /// ```
 impl Add for Expr {
     type Output = Expr;
@@ -442,7 +442,7 @@ impl Add for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = expr + 2.0;
 /// 
-/// println!("Result: {}", result.result); // 3.0
+/// assert_eq!(result.result, 3.0);
 /// ```
 impl Add<f64> for Expr {
     type Output = Expr;
@@ -464,7 +464,7 @@ impl Add<f64> for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = 2.0 + expr;
 /// 
-/// println!("Result: {}", result.result); // 3.0
+/// assert_eq!(result.result, 3.0);
 /// ```
 impl Add<Expr> for f64 {
     type Output = Expr;
@@ -489,7 +489,7 @@ impl Add<Expr> for f64 {
 /// 
 /// let result = expr * expr2;
 /// 
-/// println!("Result: {}", result.result); // 2.0
+/// assert_eq!(result.result, 2.0);
 /// ```
 impl Mul for Expr {
     type Output = Expr;
@@ -513,7 +513,7 @@ impl Mul for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = expr * 2.0;
 /// 
-/// println!("Result: {}", result.result); // 2.0
+/// assert_eq!(result.result, 2.0);
 /// ```
 impl Mul<f64> for Expr {
     type Output = Expr;
@@ -536,7 +536,7 @@ impl Mul<f64> for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = 2.0 * expr;
 /// 
-/// println!("Result: {}", result.result); // 2.0
+/// assert_eq!(result.result, 2.0);
 /// ```
 impl Mul<Expr> for f64 {
     type Output = Expr;
@@ -561,7 +561,7 @@ impl Mul<Expr> for f64 {
 /// 
 /// let result = expr - expr2;
 /// 
-/// println!("Result: {}", result.result); // -1.0
+/// assert_eq!(result.result, -1.0);
 /// ```
 impl Sub for Expr {
     type Output = Expr;
@@ -585,7 +585,7 @@ impl Sub for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = expr - 2.0;
 /// 
-/// println!("Result: {}", result.result); // -1.0
+/// assert_eq!(result.result, -1.0);
 /// ```
 impl Sub<f64> for Expr {
     type Output = Expr;
@@ -608,7 +608,7 @@ impl Sub<f64> for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = 2.0 - expr;
 /// 
-/// println!("Result: {}", result.result); // 1.0
+/// assert_eq!(result.result, 1.0);
 /// ```
 impl Sub<Expr> for f64 {
     type Output = Expr;
@@ -633,7 +633,7 @@ impl Sub<Expr> for f64 {
 /// 
 /// let result = expr / expr2;
 /// 
-/// println!("Result: {}", result.result); // 0.5
+/// assert_eq!(result.result, 0.5);
 /// ```
 impl Div for Expr {
     type Output = Expr;
@@ -657,7 +657,7 @@ impl Div for Expr {
 /// let expr = Expr::new_leaf(1.0, "x");
 /// let result = expr / 2.0;
 /// 
-/// println!("Result: {}", result.result); // 0.5
+/// assert_eq!(result.result, 0.5);
 /// ```
 impl Div<f64> for Expr {
     type Output = Expr;
@@ -686,7 +686,7 @@ impl Div<f64> for Expr {
 /// 
 /// let sum = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
 /// 
-/// println!("Result: {}", sum.result); // 6.0
+/// assert_eq!(sum.result, 6.0);
 /// ```
 impl Sum for Expr {
     fn sum<I>(iter: I) -> Self
