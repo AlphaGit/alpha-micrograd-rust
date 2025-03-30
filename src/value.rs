@@ -227,6 +227,22 @@ impl Expr {
     /// let mut expr2 = expr.tanh("tanh(x)");
     /// expr2.learn(1e-09);
     /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result, 0.7615941557793864);
+    /// ```
+    /// 
+    /// You can also vary the values of the operands and recalculate the expression:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// 
+    /// let mut original = expr2.find_mut("x").expect("Could not find x");
+    /// original.result = 2.0;
+    /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result, 0.9640275800758169);
     /// ```
     pub fn recalculate(&mut self) {
         match self.expr_type() {
