@@ -414,28 +414,22 @@ impl Expr {
     /// assert_eq!(original.expect("Could not find x").result, 1.0);
     /// ```
     pub fn find(&self, name: &str) -> Option<&Expr> {
-        if self.name == name {
-            return Some(self);
-        }
+        let mut stack = vec![self];
 
-        match self.expr_type() {
-            ExprType::Leaf => None,
-            ExprType::Unary => {
-                let operand1 = self.operand1.as_ref().expect("Unary expression did not have an operand");
-                operand1.find(name)
+        while let Some(node) = stack.pop() {
+            if node.name == name {
+                return Some(node);
             }
-            ExprType::Binary => {
-                let operand1 = self.operand1.as_ref().expect("Binary expression did not have an operand");
-                let operand2 = self.operand2.as_ref().expect("Binary expression did not have a second operand");
 
-                let result = operand1.find(name);
-                if result.is_some() {
-                    return result;
-                }
-
-                operand2.find(name)
+            if let Some(operand1) = node.operand1.as_ref() {
+                stack.push(operand1);
+            }
+            if let Some(operand2) = node.operand2.as_ref() {
+                stack.push(operand2);
             }
         }
+
+        None
     }
 
     /// Returns the count of nodes (parameters)in the expression tree.
