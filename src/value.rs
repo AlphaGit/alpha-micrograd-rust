@@ -245,6 +245,10 @@ impl Expr {
     /// assert_eq!(expr2.result, 0.9640275800758169);
     /// ```
     pub fn recalculate(&mut self) {
+        // TODO: Since we can't borrow the operands mutably without inferring multible borrows from
+        // the current node, this approach will need to stay recursive for now.
+        // We can replace it with an iterative approach after we implement an allocation arena at the
+        // tree level and then we can just visit them in a regular loop.
         match self.expr_type() {
             ExprType::Leaf => {}
             ExprType::Unary => {
