@@ -285,83 +285,116 @@ impl Expr {
     /// [`Expr::recalculate`] after calling [`Expr::learn`].
     pub fn learn(&mut self, learning_rate: f64) {
         self.grad = 1.0;
-        self.learn_internal(learning_rate);
+
+        let mut queue = VecDeque::from([self]);
+
+        while let Some(node) = queue.pop_front() {
+            match node.expr_type() {
+                ExprType::Leaf => {
+                    node.learn_internal_leaf(learning_rate);
+                }
+                ExprType::Unary => {
+                    let operand1 = node.operand1.as_mut().expect("Unary expression did not have an operand");
+                    operand1.adjust_grad_unary(&node.operation, node.grad, node.result);
+                    queue.push_back(operand1);
+                }
+                ExprType::Binary => {
+                    let operand1 = node.operand1.as_mut().expect("Binary expression did not have an operand");
+                    let operand2 = node.operand2.as_mut().expect("Binary expression did not have a second operand");
+
+                    operand1.adjust_grad_binary_op1(&node.operation, node.grad, operand2);
+                    operand2.adjust_grad_binary_op2(&node.operation, node.grad, operand1);
+
+                    queue.push_back(operand1);
+                    queue.push_back(operand2);
+                }
+            }
+        }
     }
 
-    fn learn_internal(&mut self, learning_rate: f64) {
-        match self.expr_type() {
-            ExprType::Leaf => {
-                // leaves have their gradient set externally by other nodes in the tree
-                // leaves can be learnable, in which case we update the value
-                if self.is_learnable {
-                    self.result -= learning_rate * self.grad;
-                 }
+    fn learn_internal_leaf(&mut self, learning_rate: f64) {
+        // leaves have their gradient set externally by other nodes in the tree
+        // leaves can be learnable, in which case we update the value
+        if self.is_learnable {
+            self.result -= learning_rate * self.grad;
+        }
+    }
+
+    fn adjust_grad_unary(&mut self, child_operation: &Operation, child_grad: f64, child_result: f64) {
+        match child_operation {
+            Operation::Tanh => {
+                let tanh_grad = 1.0 - (child_result * child_result);
+                self.grad = child_grad * tanh_grad;
             }
-            ExprType::Unary => {
-                let operand1 = self.operand1.as_mut().expect("Unary expression did not have an operand");
-
-                match self.operation {
-                    Operation::Tanh => {
-                        let tanh_grad = 1.0 - (self.result * self.result);
-                        operand1.grad = self.grad * tanh_grad;
-                    }
-                    Operation::Exp => {
-                        operand1.grad = self.grad * self.result;
-                    }
-                    Operation::ReLU => {
-                        operand1.grad = self.grad * if self.result > 0.0 { 1.0 } else { 0.0 };
-                    }
-                    Operation::Log => {
-                        operand1.grad = self.grad / operand1.result;
-                    }
-                    Operation::Neg => {
-                        operand1.grad = -self.grad;
-                    }
-                    _ => panic!("Invalid unary operation {:?}", self.operation),
-                }
-
-                operand1.learn_internal(learning_rate);
+            Operation::Exp => {
+                self.grad = child_grad * child_result;
             }
-            ExprType::Binary => {
-                let operand1 = self.operand1.as_mut().expect("Binary expression did not have an operand");
-                let operand2 = self.operand2.as_mut().expect("Binary expression did not have a second operand");
-
-                match self.operation {
-                    Operation::Add => {
-                        operand1.grad = self.grad;
-                        operand2.grad = self.grad;
-                    }
-                    Operation::Sub => {
-                        operand1.grad = self.grad;
-                        operand2.grad = -self.grad;
-                    }
-                    Operation::Mul => {
-                        let operand2_result = operand2.result;
-                        let operand1_result = operand1.result;
-
-                        operand1.grad = self.grad * operand2_result;
-                        operand2.grad = self.grad * operand1_result;
-                    }
-                    Operation::Div => {
-                        let operand2_result = operand2.result;
-                        let operand1_result = operand1.result;
-
-                        operand1.grad = self.grad / operand2_result;
-                        operand2.grad = -self.grad * operand1_result / (operand2_result * operand2_result);
-                    }
-                    Operation::Pow => {
-                        let exponent = operand2.result;
-                        let base = operand1.result;
-
-                        operand1.grad = self.grad * exponent * base.powf(exponent - 1.0);
-                        operand2.grad = self.grad * base.powf(exponent) * base.ln();
-                    }
-                    _ => panic!("Invalid binary operation: {:?}", self.operation),
-                }
-
-                operand1.learn_internal(learning_rate);
-                operand2.learn_internal(learning_rate);
+            Operation::ReLU => {
+                self.grad = child_grad * if child_result > 0.0 { 1.0 } else { 0.0 };
             }
+            Operation::Log => {
+                self.grad = child_grad / child_result;
+            }
+            Operation::Neg => {
+                self.grad = -child_grad;
+            }
+            _ => panic!("Invalid unary operation {:?}", child_operation),
+        }
+    }
+
+    fn adjust_grad_binary_op1(&mut self, child_operation: &Operation, child_grad: f64, operand2: &Expr) {
+        match child_operation {
+            Operation::Add => {
+                self.grad = child_grad;
+            }
+            Operation::Sub => {
+                self.grad = child_grad;
+            }
+            Operation::Mul => {
+                let operand2_result = operand2.result;
+
+                self.grad = child_grad * operand2_result;
+            }
+            Operation::Div => {
+                let operand2_result = operand2.result;
+
+                self.grad = child_grad / operand2_result;
+            }
+            Operation::Pow => {
+                let exponent = operand2.result;
+                let base = self.result;
+
+                self.grad = child_grad * exponent * base.powf(exponent - 1.0);
+            }
+            _ => panic!("Invalid binary operation: {:?}", child_operation),
+        }
+    }
+
+    fn adjust_grad_binary_op2(&mut self,child_operation: &Operation, child_grad: f64, operand1: &Expr) {
+        match child_operation {
+            Operation::Add => {
+                self.grad = child_grad;
+            }
+            Operation::Sub => {
+                self.grad = -child_grad;
+            }
+            Operation::Mul => {
+                let operand1_result = operand1.result;
+                self.grad = child_grad * operand1_result;
+            }
+            Operation::Div => {
+                let operand2_result = self.result;
+                let operand1_result = operand1.result;
+
+                self.grad = -child_grad * operand1_result / (operand2_result * operand2_result);
+            }
+            Operation::Pow => {
+                let exponent = self.result;
+                let base = operand1.result;
+
+                self.grad = child_grad * base.powf(exponent) * base.ln();
+            }
+            _ => panic!("Invalid binary operation: {:?}", child_operation),
         }
     }
 
