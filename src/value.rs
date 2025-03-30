@@ -448,14 +448,20 @@ impl Expr {
     /// assert_eq!(expr2.parameter_count(true), 1);
     /// ```
     pub fn parameter_count(&self, learnable_only: bool) -> usize {
-        let mut count = if !self.is_learnable && learnable_only { 0 } else { 1 };
+        let mut stack = vec![self];
+        let mut count = 0;
 
-        if let Some(operand1) = self.operand1.as_ref() {
-            count += operand1.parameter_count(learnable_only);
-        }
+        while let Some(node) = stack.pop() {
+            if node.is_learnable || !learnable_only {
+                count += 1;
+            }
 
-        if let Some(operand2) = self.operand2.as_ref() {
-            count += operand2.parameter_count(learnable_only);
+            if let Some(operand1) = node.operand1.as_ref() {
+                stack.push(operand1);
+            }
+            if let Some(operand2) = node.operand2.as_ref() {
+                stack.push(operand2);
+            }
         }
 
         count
