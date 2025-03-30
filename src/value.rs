@@ -432,6 +432,42 @@ impl Expr {
         None
     }
 
+    /// Finds a node in the expression tree by its name and returns a mutable reference to it.
+    /// 
+    /// This method will search the expression tree for a node with the given name.
+    /// If the node is not found, it will return [None].
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// let mut original = expr2.find_mut("x").expect("Could not find x");
+    /// original.result = 2.0;
+    /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result, 0.9640275800758169);
+    /// ```
+    pub fn find_mut(&mut self, name: &str) -> Option<&mut Expr> {
+        let mut stack = vec![self];
+
+        while let Some(node) = stack.pop() {
+            if node.name == name {
+                return Some(node);
+            }
+
+            if let Some(operand1) = node.operand1.as_mut() {
+                stack.push(operand1);
+            }
+            if let Some(operand2) = node.operand2.as_mut() {
+                stack.push(operand2);
+            }
+        }
+
+        None
+    }
+
     /// Returns the count of nodes (parameters)in the expression tree.
     /// 
     /// This method will return the total number of nodes in the expression tree,
