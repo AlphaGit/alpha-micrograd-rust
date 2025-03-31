@@ -15,3 +15,10 @@ rand = "0.8.5"
 
 [badges]
 maintenance = { status = "experimental" }
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "matmul"
+harness = false
