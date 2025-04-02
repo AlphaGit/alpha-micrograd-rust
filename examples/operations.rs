@@ -8,13 +8,13 @@ extern crate alpha_micrograd_rust;
 use alpha_micrograd_rust::value::Expr;
 
 fn main() {
-    let a = Expr::new_leaf(4.0, "a");
-    let b = Expr::new_leaf(2.0, "b");
+    let a = Expr::new_leaf(4.0);
+    let b = Expr::new_leaf(2.0);
 
     let difference = a - b;
 
-    let square_exponent = Expr::new_leaf(2.0, "square_exponent");
-    let squared_diff = difference.pow(square_exponent, "squared_diff");
+    let square_exponent = Expr::new_leaf(2.0);
+    let squared_diff = difference.pow(square_exponent);
 
     println!("squared difference: {:.2}", squared_diff.result);
 }

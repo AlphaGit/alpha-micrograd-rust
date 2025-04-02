@@ -12,7 +12,7 @@ use alpha_micrograd_rust::nn::{Activation, Layer};
 use alpha_micrograd_rust::value::Expr;
 
 fn main() {
-    let mut target = vec![Expr::new_leaf(15.0, "t1"), Expr::new_leaf(85.0, "t2")];
+    let mut target = vec![Expr::new_leaf_with_name(15.0, "t1"), Expr::new_leaf_with_name(85.0, "t2")];
     target[0].is_learnable = false;
     target[1].is_learnable = false;
 
@@ -20,9 +20,9 @@ fn main() {
     println!("Initial values: {:}", layer);
 
     let mut inputs = vec![
-        Expr::new_leaf(1.0, "x_1"),
-        Expr::new_leaf(2.0, "x_2"),
-        Expr::new_leaf(3.0, "x_3"),
+        Expr::new_leaf(1.0),
+        Expr::new_leaf(2.0),
+        Expr::new_leaf(3.0),
     ];
 
     inputs.iter_mut().for_each(|input| {
@@ -31,19 +31,19 @@ fn main() {
 
     let mut y = layer.forward(inputs);
     let mut y1 = y.remove(0);
-    y1.name = "y1".to_string();
+    y1.name = Some("y1".to_string());
     let mut y2 = y.remove(0);
-    y2.name = "y2".to_string();
+    y2.name = Some("y2".to_string());
 
     let d1 = y1 - target[0].clone();
-    let mut sqr1 = Expr::new_leaf(2.0, "square_exponent1");
+    let mut sqr1 = Expr::new_leaf(2.0);
     sqr1.is_learnable = false;
 
     let d2 = y2 - target[1].clone();
-    let mut sqr2 = Expr::new_leaf(2.0, "square_exponent2");
+    let mut sqr2 = Expr::new_leaf(2.0);
     sqr2.is_learnable = false;
 
-    let mut loss = d1.pow(sqr1, "diff1") + d2.pow(sqr2, "diff2");
+    let mut loss = d1.pow(sqr1) + d2.pow(sqr2);
 
     let t1 = loss.find("t1").unwrap();
     let t2 = loss.find("t2").unwrap();

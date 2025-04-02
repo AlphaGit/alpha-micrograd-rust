@@ -19,11 +19,11 @@ In this example we model the function `tanh(x1 * w1 + x2 * w2 + b)`, which might
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let x1 = Expr::new_leaf(2.0, "x1");
-let x2 = Expr::new_leaf(0.0, "x2");
-let w1 = Expr::new_leaf(-3.0, "w1");
-let w2 = Expr::new_leaf(1.0, "w2");
-let b = Expr::new_leaf(6.8813735870195432, "b");
+let x1 = Expr::new_leaf(2.0);
+let x2 = Expr::new_leaf(0.0);
+let w1 = Expr::new_leaf(-3.0);
+let w2 = Expr::new_leaf(1.0);
+let b = Expr::new_leaf(6.8813735870195432);
 ```
 
 As you can see, each value is represented by an `Expr` struct, which holds the value and the internal gradient required for backpropagation (to be seen later on).
@@ -33,11 +33,11 @@ Values can be combined in an ergonomic approach:
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let x1 = Expr::new_leaf(2.0, "x1");
-let x2 = Expr::new_leaf(0.0, "x2");
-let w1 = Expr::new_leaf(-3.0, "w1");
-let w2 = Expr::new_leaf(1.0, "w2");
-let b = Expr::new_leaf(6.8813735870195432, "b");
+let x1 = Expr::new_leaf(2.0);
+let x2 = Expr::new_leaf(0.0);
+let w1 = Expr::new_leaf(-3.0);
+let w2 = Expr::new_leaf(1.0);
+let b = Expr::new_leaf(6.8813735870195432);
 
 let x1w1 = x1 * w1;
 let x2w2 = x2 * w2;
@@ -50,8 +50,8 @@ Or you can use helper functions already embedded in the `Expr` struct:
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let x1 = Expr::new_leaf(2.0, "x1");
-let mut o = x1.tanh("output");
+let x1 = Expr::new_leaf(2.0);
+let mut o = x1.tanh();
 ```
 
 For simplicity of the construction of the in-memory tree, the `Expr` values are owned by the new `Expr` values created by the operations. This means that you can't use the same `Expr` value in different branches of the tree as of right now.
@@ -61,7 +61,7 @@ You can also evaluate the value of the expression:
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let o = Expr::new_leaf(2.0, "x1") + Expr::new_leaf(3.0, "x2");
+let o = Expr::new_leaf(2.0) + Expr::new_leaf(3.0);
 println!("{}", o.result)
 ```
 
@@ -70,8 +70,8 @@ But more interestingly, you can backpropagate the gradients and have the learnab
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let x1 = Expr::new_leaf(2.0, "x1");
-let mut o = x1.tanh("output");
+let x1 = Expr::new_leaf(2.0);
+let mut o = x1.tanh();
 
 let lr = 0.001; // learning rate
 o.learn(lr);
@@ -82,7 +82,7 @@ Maybe some parameters (like inputs, loss functions) should not be learnable, so 
 ```rust
 use alpha_micrograd_rust::value::Expr;
 
-let mut x1 = Expr::new_leaf(2.0, "x1");
+let mut x1 = Expr::new_leaf(2.0);
 x1.is_learnable = false;
 ```
 
@@ -106,7 +106,7 @@ use alpha_micrograd_rust::nn::{Neuron, Activation};
 use alpha_micrograd_rust::value::Expr;
 
 let n = Neuron::new(2, Activation::None); // 2 inputs
-let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
+let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 let y = n.forward(x);
 ```
 
@@ -117,7 +117,7 @@ use alpha_micrograd_rust::nn::{Layer, Activation};
 use alpha_micrograd_rust::value::Expr;
 
 let mut l = Layer::new(2, 2, Activation::None);
-let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
+let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 let y = l.forward(x);
 ```
 
@@ -132,7 +132,7 @@ let mut mlp = MLP::new(
     vec![2, 2], Activation::Tanh, // hidden layers
     1, Activation::None, // output layer
 );
-let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
+let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 let y = mlp.forward(x);
 ```
 
@@ -147,12 +147,12 @@ let mut mlp = MLP::new(
     vec![2, 2], Activation::Tanh, // hidden layers
     1, Activation::None, // output layer
 );
-let x = vec![Expr::new_leaf(1.0, "x1"), Expr::new_leaf(2.0, "x2")];
+let x = vec![Expr::new_leaf(1.0), Expr::new_leaf(2.0)];
 let mut y = mlp.forward(x);
 
-let target = Expr::new_leaf(0.0, "target");
-let exponent = Expr::new_leaf(2.0, "exponent");
-let mut loss = (y.remove(0) - target).pow(exponent, "loss");
+let target = Expr::new_leaf(0.0);
+let exponent = Expr::new_leaf(2.0);
+let mut loss = (y.remove(0) - target).pow(exponent);
 loss.learn(0.001);
 ```
 

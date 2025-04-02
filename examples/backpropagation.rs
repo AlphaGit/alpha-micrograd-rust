@@ -14,15 +14,15 @@ use alpha_micrograd_rust::value::Expr;
 
 fn main() {
     // these are the initial values for the nodes of the graph
-    let mut x1 = Expr::new_leaf(2.0, "x1");
+    let mut x1 = Expr::new_leaf(2.0);
     x1.is_learnable = false;
 
-    let mut x2 = Expr::new_leaf(1.0, "x2");
+    let mut x2 = Expr::new_leaf(1.0);
     x2.is_learnable = false;
 
-    let w1 = Expr::new_leaf(-3.0, "w1");
-    let w2 = Expr::new_leaf(1.0, "w2");
-    let b = Expr::new_leaf(6.5, "b");
+    let w1 = Expr::new_leaf(-3.0);
+    let w2 = Expr::new_leaf(1.0);
+    let b = Expr::new_leaf(6.5);
 
     // here we compute the expression x1*w1 + x2*w2 + b
     let x1w1 = x1 * w1;
@@ -31,20 +31,22 @@ fn main() {
     let n = x1w1_x2w2 + b;
 
     // we add a non-linear activation function: tanh(x1*w1 + x2*w2 + b)
-    let o = n.tanh("o");
+    let mut o = n.tanh();
+    // we label it so that we can find it later
+    o.name = Some("o".to_string());
 
     println!("Initial output: {:.2}", o.result);
 
     // we set the target value
     let target_value = 0.2;
-    let mut target = Expr::new_leaf(target_value, "target");
+    let mut target = Expr::new_leaf(target_value);
     target.is_learnable = false;
 
     // we compute the loss function
-    let mut squared_exponent = Expr::new_leaf(2.0, "squared_exponent");
+    let mut squared_exponent = Expr::new_leaf(2.0);
     squared_exponent.is_learnable = false;
 
-    let mut loss = (o - target).pow(squared_exponent, "loss");
+    let mut loss = (o - target).pow(squared_exponent);
     loss.is_learnable = false;
 
     // we print the initial loss

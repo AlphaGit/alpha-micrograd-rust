@@ -12,16 +12,16 @@ use alpha_micrograd_rust::nn::{Activation, Neuron};
 use alpha_micrograd_rust::value::Expr;
 
 fn main() {
-    let mut target = Expr::new_leaf(50.0, "target");
+    let mut target = Expr::new_leaf_with_name(50.0, "target");
     target.is_learnable = false;
 
     let neuron = Neuron::new(3, Activation::None);
     println!("Initial values: {:}", neuron);
 
     let mut inputs = vec![
-        Expr::new_leaf(1.0, "x_1"),
-        Expr::new_leaf(2.0, "x_2"),
-        Expr::new_leaf(3.0, "x_3"),
+        Expr::new_leaf(1.0),
+        Expr::new_leaf(2.0),
+        Expr::new_leaf(3.0),
     ];
 
     inputs.iter_mut().for_each(|input| {
@@ -29,13 +29,13 @@ fn main() {
     });
 
     let mut y = neuron.forward(inputs);
-    y.name = "y".to_string();
+    y.name = Some("y".to_string());
 
     let difference = y - target;
-    let mut square_exponent = Expr::new_leaf(2.0, "square_exponent");
+    let mut square_exponent = Expr::new_leaf(2.0);
     square_exponent.is_learnable = false;
 
-    let mut loss = difference.pow(square_exponent, "loss");
+    let mut loss = difference.pow(square_exponent);
 
     let target = loss.find("target").unwrap();
     let y = loss.find("y").unwrap();

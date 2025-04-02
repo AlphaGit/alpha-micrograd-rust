@@ -59,7 +59,7 @@ pub struct Expr {
     pub is_learnable: bool,
     grad: f64,
     /// The name of the expression, used to identify it in the calculation graph.
-    pub name: String,
+    pub name: Option<String>,
 }
 
 impl Expr {
@@ -69,9 +69,9 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
+    /// let expr = Expr::new_leaf(1.0);
     /// ```
-    pub fn new_leaf(value: f64, name: &str) -> Expr {
+    pub fn new_leaf(value: f64) -> Expr {
         Expr {
             operand1: None,
             operand2: None,
@@ -79,8 +79,24 @@ impl Expr {
             result: value,
             is_learnable: true,
             grad: 0.0,
-            name: name.to_string(),
+            name: None,
         }
+    }
+
+    /// Creates a new leaf expression with the given value and name.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// 
+    /// assert_eq!(expr.name, Some("x".to_string()));
+    /// ```
+    pub fn new_leaf_with_name(value: f64, name: &str) -> Expr {
+        let mut expr = Expr::new_leaf(value);
+        expr.name = Some(name.to_string());
+        expr
     }
 
     fn expr_type(&self) -> ExprType {
@@ -91,7 +107,7 @@ impl Expr {
         }
     }
 
-    fn new_unary(operand: Expr, operation: Operation, result: f64, name: &str) -> Expr {
+    fn new_unary(operand: Expr, operation: Operation, result: f64) -> Expr {
         operation.assert_is_type(ExprType::Unary);
         Expr {
             operand1: Some(Box::new(operand)),
@@ -100,11 +116,11 @@ impl Expr {
             result,
             is_learnable: false,
             grad: 0.0,
-            name: name.to_string(),
+            name: None,
         }
     }
 
-    fn new_binary(operand1: Expr, operand2: Expr, operation: Operation, result: f64, name: &str) -> Expr {
+    fn new_binary(operand1: Expr, operand2: Expr, operation: Operation, result: f64) -> Expr {
         operation.assert_is_type(ExprType::Binary);
         Expr {
             operand1: Some(Box::new(operand1)),
@@ -113,7 +129,7 @@ impl Expr {
             result,
             is_learnable: false,
             grad: 0.0,
-            name: name.to_string(),
+            name: None,
         }
     }
 
@@ -123,14 +139,14 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let expr2 = expr.tanh("tanh");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.tanh();
     /// 
     /// assert_eq!(expr2.result, 0.7615941559557649);
     /// ```
-    pub fn tanh(self, name: &str) -> Expr {
+    pub fn tanh(self) -> Expr {
         let result = self.result.tanh();
-        Expr::new_unary(self, Operation::Tanh, result, name)
+        Expr::new_unary(self, Operation::Tanh, result)
     }
 
     /// Applies the rectified linear unit function to the expression and returns it as a new expression.
@@ -139,14 +155,14 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(-1.0, "x");
-    /// let expr2 = expr.relu("relu");
+    /// let expr = Expr::new_leaf(-1.0);
+    /// let expr2 = expr.relu();
     /// 
     /// assert_eq!(expr2.result, 0.0);
     /// ```
-    pub fn relu(self, name: &str) -> Expr {
+    pub fn relu(self) -> Expr {
         let result = self.result.max(0.0);
-        Expr::new_unary(self, Operation::ReLU, result, name)
+        Expr::new_unary(self, Operation::ReLU, result)
     }
 
     /// Applies the exponential function (e^x) to the expression and returns it as a new expression.
@@ -155,14 +171,14 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let expr2 = expr.exp("exp");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.exp();
     /// 
     /// assert_eq!(expr2.result, 2.718281828459045);
     /// ```
-    pub fn exp(self, name: &str) -> Expr {
+    pub fn exp(self) -> Expr {
         let result = self.result.exp();
-        Expr::new_unary(self, Operation::Exp, result, name)
+        Expr::new_unary(self, Operation::Exp, result)
     }
 
     /// Raises the expression to the power of the given exponent (expression) and returns it as a new expression.
@@ -171,15 +187,15 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(2.0, "x");
-    /// let exponent = Expr::new_leaf(3.0, "y");
-    /// let result = expr.pow(exponent, "x^y");
+    /// let expr = Expr::new_leaf(2.0);
+    /// let exponent = Expr::new_leaf(3.0);
+    /// let result = expr.pow(exponent);
     /// 
     /// assert_eq!(result.result, 8.0);
     /// ```
-    pub fn pow(self, exponent: Expr, name: &str) -> Expr {
+    pub fn pow(self, exponent: Expr) -> Expr {
         let result = self.result.powf(exponent.result);
-        Expr::new_binary(self, exponent, Operation::Pow, result, name)
+        Expr::new_binary(self, exponent, Operation::Pow, result)
     }
 
     /// Applies the natural logarithm function to the expression and returns it as a new expression.
@@ -188,14 +204,14 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(2.0, "x");
-    /// let expr2 = expr.log("log");
+    /// let expr = Expr::new_leaf(2.0);
+    /// let expr2 = expr.log();
     /// 
     /// assert_eq!(expr2.result, 0.6931471805599453);
     /// ```
-    pub fn log(self, name: &str) -> Expr {
+    pub fn log(self) -> Expr {
         let result = self.result.ln();
-        Expr::new_unary(self, Operation::Log, result, name)
+        Expr::new_unary(self, Operation::Log, result)
     }
 
     /// Negates the expression and returns it as a new expression.
@@ -204,14 +220,14 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let expr2 = expr.neg("neg");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.neg();
     /// 
     /// assert_eq!(expr2.result, -1.0);
     /// ```
-    pub fn neg(self, name: &str) -> Expr {
+    pub fn neg(self) -> Expr {
         let result = -self.result;
-        Expr::new_unary(self, Operation::Neg, result, name)
+        Expr::new_unary(self, Operation::Neg, result)
     }
 
     /// Recalculates the value of the expression recursively, from new values of the operands.
@@ -223,8 +239,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let mut expr2 = expr.tanh();
     /// expr2.learn(1e-09);
     /// expr2.recalculate();
     /// 
@@ -235,8 +251,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let mut expr2 = expr.tanh();
     /// 
     /// let mut original = expr2.find_mut("x").expect("Could not find x");
     /// original.result = 2.0;
@@ -294,8 +310,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let mut expr2 = expr.tanh();
     /// expr2.learn(1e-09);
     /// ```
     /// 
@@ -428,8 +444,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let expr2 = expr.tanh();
     /// let original = expr2.find("x");
     /// 
     /// assert_eq!(original.expect("Could not find x").result, 1.0);
@@ -438,7 +454,7 @@ impl Expr {
         let mut stack = vec![self];
 
         while let Some(node) = stack.pop() {
-            if node.name == name {
+            if node.name == Some(name.to_string()) {
                 return Some(node);
             }
 
@@ -462,8 +478,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let mut expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let mut expr2 = expr.tanh();
     /// let mut original = expr2.find_mut("x").expect("Could not find x");
     /// original.result = 2.0;
     /// expr2.recalculate();
@@ -474,7 +490,7 @@ impl Expr {
         let mut stack = vec![self];
 
         while let Some(node) = stack.pop() {
-            if node.name == name {
+            if node.name == Some(name.to_string()) {
                 return Some(node);
             }
 
@@ -498,8 +514,8 @@ impl Expr {
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
     /// 
-    /// let expr = Expr::new_leaf(1.0, "x");
-    /// let expr2 = expr.tanh("tanh(x)");
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.tanh();
     /// 
     /// assert_eq!(expr2.parameter_count(false), 2);
     /// assert_eq!(expr2.parameter_count(true), 1);
@@ -533,8 +549,8 @@ impl Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
-/// let expr2 = Expr::new_leaf(2.0, "y");
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
 /// 
 /// let result = expr + expr2;
 /// 
@@ -545,8 +561,7 @@ impl Add for Expr {
 
     fn add(self, other: Expr) -> Expr {
         let result = self.result + other.result;
-        let name = &format!("({} + {})", self.name, other.name);
-        Expr::new_binary(self, other, Operation::Add, result, name)
+        Expr::new_binary(self, other, Operation::Add, result)
     }
 }
 
@@ -558,7 +573,7 @@ impl Add for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = expr + 2.0;
 /// 
 /// assert_eq!(result.result, 3.0);
@@ -567,7 +582,7 @@ impl Add<f64> for Expr {
     type Output = Expr;
 
     fn add(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other, &other.to_string());
+        let operand2 = Expr::new_leaf(other);
         self + operand2
     }
 }
@@ -580,7 +595,7 @@ impl Add<f64> for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = 2.0 + expr;
 /// 
 /// assert_eq!(result.result, 3.0);
@@ -589,7 +604,7 @@ impl Add<Expr> for f64 {
     type Output = Expr;
 
     fn add(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self, &self.to_string());
+        let operand1 = Expr::new_leaf(self);
         operand1 + other
     }
 }
@@ -603,8 +618,8 @@ impl Add<Expr> for f64 {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
-/// let expr2 = Expr::new_leaf(2.0, "y");
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
 /// 
 /// let result = expr * expr2;
 /// 
@@ -615,8 +630,7 @@ impl Mul for Expr {
 
     fn mul(self, other: Expr) -> Expr {
         let result = self.result * other.result;
-        let name = &format!("({} * {})", self.name, other.name);
-        Expr::new_binary(self, other, Operation::Mul, result, name)
+        Expr::new_binary(self, other, Operation::Mul, result)
     }
 }
 
@@ -629,7 +643,7 @@ impl Mul for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = expr * 2.0;
 /// 
 /// assert_eq!(result.result, 2.0);
@@ -638,7 +652,7 @@ impl Mul<f64> for Expr {
     type Output = Expr;
 
     fn mul(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other, &other.to_string());
+        let operand2 = Expr::new_leaf(other);
         self * operand2
     }
 }
@@ -652,7 +666,7 @@ impl Mul<f64> for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = 2.0 * expr;
 /// 
 /// assert_eq!(result.result, 2.0);
@@ -661,7 +675,7 @@ impl Mul<Expr> for f64 {
     type Output = Expr;
 
     fn mul(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self, &self.to_string());
+        let operand1 = Expr::new_leaf(self);
         operand1 * other
     }
 }
@@ -675,8 +689,8 @@ impl Mul<Expr> for f64 {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
-/// let expr2 = Expr::new_leaf(2.0, "y");
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
 /// 
 /// let result = expr - expr2;
 /// 
@@ -687,8 +701,7 @@ impl Sub for Expr {
 
     fn sub(self, other: Expr) -> Expr {
         let result = self.result - other.result;
-        let name = &format!("({} - {})", self.name, other.name);
-        Expr::new_binary(self, other, Operation::Sub, result, name)
+        Expr::new_binary(self, other, Operation::Sub, result)
     }
 }
 
@@ -701,7 +714,7 @@ impl Sub for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = expr - 2.0;
 /// 
 /// assert_eq!(result.result, -1.0);
@@ -710,7 +723,7 @@ impl Sub<f64> for Expr {
     type Output = Expr;
 
     fn sub(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other, &other.to_string());
+        let operand2 = Expr::new_leaf(other);
         self - operand2
     }
 }
@@ -724,7 +737,7 @@ impl Sub<f64> for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = 2.0 - expr;
 /// 
 /// assert_eq!(result.result, 1.0);
@@ -733,7 +746,7 @@ impl Sub<Expr> for f64 {
     type Output = Expr;
 
     fn sub(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self, &self.to_string());
+        let operand1 = Expr::new_leaf(self);
         operand1 - other
     }
 }
@@ -747,8 +760,8 @@ impl Sub<Expr> for f64 {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
-/// let expr2 = Expr::new_leaf(2.0, "y");
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
 /// 
 /// let result = expr / expr2;
 /// 
@@ -759,8 +772,7 @@ impl Div for Expr {
 
     fn div(self, other: Expr) -> Expr {
         let result = self.result / other.result;
-        let name = &format!("({} / {})", self.name, other.name);
-        Expr::new_binary(self, other, Operation::Div, result, name)
+        Expr::new_binary(self, other, Operation::Div, result)
     }
 }
 
@@ -773,7 +785,7 @@ impl Div for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
+/// let expr = Expr::new_leaf(1.0);
 /// let result = expr / 2.0;
 /// 
 /// assert_eq!(result.result, 0.5);
@@ -782,7 +794,7 @@ impl Div<f64> for Expr {
     type Output = Expr;
 
     fn div(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other, &other.to_string());
+        let operand2 = Expr::new_leaf(other);
         self / operand2
     }
 }
@@ -799,9 +811,9 @@ impl Div<f64> for Expr {
 /// ```rust
 /// use alpha_micrograd_rust::value::Expr;
 /// 
-/// let expr = Expr::new_leaf(1.0, "x");
-/// let expr2 = Expr::new_leaf(2.0, "y");
-/// let expr3 = Expr::new_leaf(3.0, "z");
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
+/// let expr3 = Expr::new_leaf(3.0);
 /// 
 /// let sum = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
 /// 
@@ -813,7 +825,7 @@ impl Sum for Expr {
         I: Iterator<Item = Self>,
     {
         iter.reduce(|acc, x| acc + x)
-            .unwrap_or(Expr::new_leaf(0.0, "0.0"))
+            .unwrap_or(Expr::new_leaf(0.0))
     }
 }
 
@@ -829,14 +841,14 @@ mod tests {
 
     #[test]
     fn test() {
-        let expr = Expr::new_leaf(1.0, "x");
+        let expr = Expr::new_leaf(1.0);
         assert_eq!(expr.result, 1.0);
     }
 
     #[test]
     fn test_unary() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_unary(expr, Operation::Tanh, 1.1, "tanh(x)");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_unary(expr, Operation::Tanh, 1.1);
 
         assert_eq!(expr2.result, 1.1);
         assert_eq!(expr2.operand1.unwrap().result, 1.0);
@@ -845,15 +857,15 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_unary_expression_type_check() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let _expr2 = Expr::new_unary(expr, Operation::Add, 1.1, "tanh(x)");
+        let expr = Expr::new_leaf(1.0);
+        let _expr2 = Expr::new_unary(expr, Operation::Add, 1.1);
     }
 
     #[test]
     fn test_binary() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_leaf(2.0, "y");
-        let expr3 = Expr::new_binary(expr, expr2, Operation::Add, 1.1, "x + y");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let expr3 = Expr::new_binary(expr, expr2, Operation::Add, 1.1);
 
         assert_eq!(expr3.result, 1.1);
         assert_eq!(expr3.operand1.unwrap().result, 1.0);
@@ -863,17 +875,17 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_binary_expression_type_check() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_leaf(2.0, "y");
-        let _expr3 = Expr::new_binary(expr, expr2, Operation::Tanh, 3.0, "x + y");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let _expr3 = Expr::new_binary(expr, expr2, Operation::Tanh, 3.0);
     }
 
     #[test]
     fn test_mixed_tree() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_leaf(2.0, "y");
-        let expr3 = Expr::new_binary(expr, expr2, Operation::Sub, 1.1, "x - y");
-        let expr4 = Expr::new_unary(expr3, Operation::Tanh, 1.2, "tanh(x - y)");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let expr3 = Expr::new_binary(expr, expr2, Operation::Sub, 1.1);
+        let expr4 = Expr::new_unary(expr3, Operation::Tanh, 1.2);
 
         assert_eq!(expr4.result, 1.2);
         let expr3 = expr4.operand1.unwrap();
@@ -884,8 +896,8 @@ mod tests {
 
     #[test]
     fn test_tanh() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.tanh("tanh(x)");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.tanh();
 
         assert_eq!(expr2.result, 0.7615941559557649);
         assert!(expr2.operand1.is_some());
@@ -895,7 +907,7 @@ mod tests {
 
         // Some other known values
         fn get_tanh(x: f64) -> f64 {
-            Expr::new_leaf(x, "x").tanh("tanh(x)").result
+            Expr::new_leaf(x).tanh().result
         }
 
         assert_float_eq(get_tanh(10.74), 0.9999999);
@@ -905,8 +917,8 @@ mod tests {
 
     #[test]
     fn test_exp() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.exp("exp(x)");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.exp();
 
         assert_eq!(expr2.result, 2.718281828459045);
         assert!(expr2.operand1.is_some());
@@ -918,8 +930,8 @@ mod tests {
     #[test]
     fn test_relu() {
         // negative case
-        let expr = Expr::new_leaf(-1.0, "x");
-        let expr2 = expr.relu("relu(x)");
+        let expr = Expr::new_leaf(-1.0);
+        let expr2 = expr.relu();
 
         assert_eq!(expr2.result, 0.0);
         assert!(expr2.operand1.is_some());
@@ -928,8 +940,8 @@ mod tests {
         assert!(expr2.operand2.is_none());
 
         // positive case
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.relu("relu(x)");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.relu();
 
         assert_eq!(expr2.result, 1.0);
         assert!(expr2.operand1.is_some());
@@ -940,9 +952,9 @@ mod tests {
 
     #[test]
     fn test_pow() {
-        let expr = Expr::new_leaf(2.0, "x");
-        let expr2 = Expr::new_leaf(3.0, "y");
-        let result = expr.pow(expr2, "x^y");
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = Expr::new_leaf(3.0);
+        let result = expr.pow(expr2);
 
         assert_eq!(result.result, 8.0);
         assert!(result.operand1.is_some());
@@ -955,8 +967,8 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_leaf(2.0, "y");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
         let expr3 = expr + expr2;
 
         assert_eq!(expr3.result, 3.0);
@@ -965,12 +977,11 @@ mod tests {
         assert!(expr3.operand2.is_some());
         assert_eq!(expr3.operand2.unwrap().result, 2.0);
         assert_eq!(expr3.operation, Operation::Add);
-        assert_eq!(expr3.name, "(x + y)");
     }
 
     #[test]
     fn test_add_f64() {
-        let expr = Expr::new_leaf(1.0, "x");
+        let expr = Expr::new_leaf(1.0);
         let expr2 = expr + 2.0;
 
         assert_eq!(expr2.result, 3.0);
@@ -979,12 +990,11 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 2.0);
         assert_eq!(expr2.operation, Operation::Add);
-        assert_eq!(expr2.name, "(x + 2)");
     }
 
     #[test]
     fn test_add_f64_expr() {
-        let expr = Expr::new_leaf(1.0, "x");
+        let expr = Expr::new_leaf(1.0);
         let expr2 = 2.0 + expr;
 
         assert_eq!(expr2.result, 3.0);
@@ -993,13 +1003,12 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 1.0);
         assert_eq!(expr2.operation, Operation::Add);
-        assert_eq!(expr2.name, "(2 + x)");
     }
 
     #[test]
     fn test_mul() {
-        let expr = Expr::new_leaf(2.0, "x");
-        let expr2 = Expr::new_leaf(3.0, "y");
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = Expr::new_leaf(3.0);
         let expr3 = expr * expr2;
 
         assert_eq!(expr3.result, 6.0);
@@ -1008,12 +1017,11 @@ mod tests {
         assert!(expr3.operand2.is_some());
         assert_eq!(expr3.operand2.unwrap().result, 3.0);
         assert_eq!(expr3.operation, Operation::Mul);
-        assert_eq!(expr3.name, "(x * y)");
     }
 
     #[test]
     fn test_mul_f64() {
-        let expr = Expr::new_leaf(2.0, "x");
+        let expr = Expr::new_leaf(2.0);
         let expr2 = expr * 3.0;
 
         assert_eq!(expr2.result, 6.0);
@@ -1022,12 +1030,11 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 3.0);
         assert_eq!(expr2.operation, Operation::Mul);
-        assert_eq!(expr2.name, "(x * 3)");
     }
 
     #[test]
     fn test_mul_f64_expr() {
-        let expr = Expr::new_leaf(2.0, "x");
+        let expr = Expr::new_leaf(2.0);
         let expr2 = 3.0 * expr;
 
         assert_eq!(expr2.result, 6.0);
@@ -1036,13 +1043,12 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 2.0);
         assert_eq!(expr2.operation, Operation::Mul);
-        assert_eq!(expr2.name, "(3 * x)");
     }
 
     #[test]
     fn test_sub() {
-        let expr = Expr::new_leaf(2.0, "x");
-        let expr2 = Expr::new_leaf(3.0, "y");
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = Expr::new_leaf(3.0);
         let expr3 = expr - expr2;
 
         assert_eq!(expr3.result, -1.0);
@@ -1051,12 +1057,11 @@ mod tests {
         assert!(expr3.operand2.is_some());
         assert_eq!(expr3.operand2.unwrap().result, 3.0);
         assert_eq!(expr3.operation, Operation::Sub);
-        assert_eq!(expr3.name, "(x - y)");
     }
 
     #[test]
     fn test_sub_f64() {
-        let expr = Expr::new_leaf(2.0, "x");
+        let expr = Expr::new_leaf(2.0);
         let expr2 = expr - 3.0;
 
         assert_eq!(expr2.result, -1.0);
@@ -1065,12 +1070,11 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 3.0);
         assert_eq!(expr2.operation, Operation::Sub);
-        assert_eq!(expr2.name, "(x - 3)");
     }
 
     #[test]
     fn test_sub_f64_expr() {
-        let expr = Expr::new_leaf(2.0, "x");
+        let expr = Expr::new_leaf(2.0);
         let expr2 = 3.0 - expr;
 
         assert_eq!(expr2.result, 1.0);
@@ -1079,13 +1083,12 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 2.0);
         assert_eq!(expr2.operation, Operation::Sub);
-        assert_eq!(expr2.name, "(3 - x)");
     }
 
     #[test]
     fn test_div() {
-        let expr = Expr::new_leaf(6.0, "x");
-        let expr2 = Expr::new_leaf(3.0, "y");
+        let expr = Expr::new_leaf(6.0);
+        let expr2 = Expr::new_leaf(3.0);
         let expr3 = expr / expr2;
 
         assert_eq!(expr3.result, 2.0);
@@ -1094,12 +1097,11 @@ mod tests {
         assert!(expr3.operand2.is_some());
         assert_eq!(expr3.operand2.unwrap().result, 3.0);
         assert_eq!(expr3.operation, Operation::Div);
-        assert_eq!(expr3.name, "(x / y)");
     }
 
     #[test]
     fn test_div_f64() {
-        let expr = Expr::new_leaf(6.0, "x");
+        let expr = Expr::new_leaf(6.0);
         let expr2 = expr / 3.0;
 
         assert_eq!(expr2.result, 2.0);
@@ -1108,13 +1110,12 @@ mod tests {
         assert!(expr2.operand2.is_some());
         assert_eq!(expr2.operand2.unwrap().result, 3.0);
         assert_eq!(expr2.operation, Operation::Div);
-        assert_eq!(expr2.name, "(x / 3)");
     }
 
     #[test]
     fn test_log() {
-        let expr = Expr::new_leaf(2.0, "x");
-        let expr2 = expr.log("log(x)");
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = expr.log();
 
         assert_eq!(expr2.result, 0.6931471805599453);
         assert!(expr2.operand1.is_some());
@@ -1125,8 +1126,8 @@ mod tests {
 
     #[test]
     fn test_neg() {
-        let expr = Expr::new_leaf(2.0, "x");
-        let expr2 = expr.neg("neg(x)");
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = expr.neg();
 
         assert_eq!(expr2.result, -2.0);
         assert!(expr2.operand1.is_some());
@@ -1137,8 +1138,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_add() {
-        let operand1 = Expr::new_leaf(1.0, "x");
-        let operand2 = Expr::new_leaf(2.0, "y");
+        let operand1 = Expr::new_leaf(1.0);
+        let operand2 = Expr::new_leaf(2.0);
         let mut expr3 = operand1 + operand2;
 
         expr3.learn(1e-09);
@@ -1151,8 +1152,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_sub() {
-        let operand1 = Expr::new_leaf(1.0, "x");
-        let operand2 = Expr::new_leaf(2.0, "y");
+        let operand1 = Expr::new_leaf(1.0);
+        let operand2 = Expr::new_leaf(2.0);
         let mut expr3 = operand1 - operand2;
 
         expr3.learn(1e-09);
@@ -1165,8 +1166,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_mul() {
-        let operand1 = Expr::new_leaf(3.0, "x");
-        let operand2 = Expr::new_leaf(4.0, "y");
+        let operand1 = Expr::new_leaf(3.0);
+        let operand2 = Expr::new_leaf(4.0);
         let mut expr3 = operand1 * operand2;
 
         expr3.learn(1e-09);
@@ -1179,8 +1180,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_div() {
-        let operand1 = Expr::new_leaf(3.0, "x");
-        let operand2 = Expr::new_leaf(4.0, "y");
+        let operand1 = Expr::new_leaf(3.0);
+        let operand2 = Expr::new_leaf(4.0);
         let mut expr3 = operand1 / operand2;
 
         expr3.learn(1e-09);
@@ -1193,8 +1194,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_tanh() {
-        let operand1 = Expr::new_leaf(0.0, "x");
-        let mut expr2 = operand1.tanh("tanh(x)");
+        let operand1 = Expr::new_leaf(0.0);
+        let mut expr2 = operand1.tanh();
 
         expr2.learn(1e-09);
 
@@ -1204,8 +1205,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_relu() {
-        let operand1 = Expr::new_leaf(-1.0, "x");
-        let mut expr2 = operand1.relu("relu(x)");
+        let operand1 = Expr::new_leaf(-1.0);
+        let mut expr2 = operand1.relu();
 
         expr2.learn(1e-09);
 
@@ -1215,8 +1216,8 @@ mod tests {
 
     #[test]
     fn test_backpropagation_exp() {
-        let operand1 = Expr::new_leaf(0.0, "x");
-        let mut expr2 = operand1.exp("exp(x)");
+        let operand1 = Expr::new_leaf(0.0);
+        let mut expr2 = operand1.exp();
 
         expr2.learn(1e-09);
 
@@ -1226,9 +1227,9 @@ mod tests {
 
     #[test]
     fn test_backpropagation_pow() {
-        let operand1 = Expr::new_leaf(2.0, "x");
-        let operand2 = Expr::new_leaf(3.0, "y");
-        let mut expr3 = operand1.pow(operand2, "x^y");
+        let operand1 = Expr::new_leaf(2.0);
+        let operand2 = Expr::new_leaf(3.0);
+        let mut expr3 = operand1.pow(operand2);
 
         expr3.learn(1e-09);
 
@@ -1240,10 +1241,10 @@ mod tests {
 
     #[test]
     fn test_backpropagation_mixed_tree() {
-        let operand1 = Expr::new_leaf(1.0, "x");
-        let operand2 = Expr::new_leaf(2.0, "y");
+        let operand1 = Expr::new_leaf(1.0);
+        let operand2 = Expr::new_leaf(2.0);
         let expr3 = operand1 + operand2;
-        let mut expr4 = expr3.tanh("tanh(x + y)");
+        let mut expr4 = expr3.tanh();
 
         expr4.learn(1e-09);
 
@@ -1258,17 +1259,17 @@ mod tests {
 
     #[test]
     fn test_backpropagation_karpathys_example() {
-        let x1 = Expr::new_leaf(2.0, "x1");
-        let x2 = Expr::new_leaf(0.0, "x2");
-        let w1 = Expr::new_leaf(-3.0, "w1");
-        let w2 = Expr::new_leaf(1.0, "w2");
-        let b = Expr::new_leaf(6.8813735870195432, "b");
+        let x1 = Expr::new_leaf(2.0);
+        let x2 = Expr::new_leaf(0.0);
+        let w1 = Expr::new_leaf(-3.0);
+        let w2 = Expr::new_leaf(1.0);
+        let b = Expr::new_leaf(6.8813735870195432);
 
         let x1w1 = x1 * w1;
         let x2w2 = x2 * w2;
         let x1w1_x2w2 = x1w1 + x2w2;
         let n = x1w1_x2w2 + b;
-        let mut o = n.tanh("tanh(n)");
+        let mut o = n.tanh();
 
         o.learn(1e-09);
 
@@ -1314,7 +1315,7 @@ mod tests {
 
     #[test]
     fn test_learn_simple() {
-        let mut expr = Expr::new_leaf(1.0, "x");
+        let mut expr = Expr::new_leaf(1.0);
         expr.learn(1e-01);
 
         assert_float_eq(expr.result, 0.9);
@@ -1322,7 +1323,7 @@ mod tests {
 
     #[test]
     fn test_learn_skips_non_learnable() {
-        let mut expr = Expr::new_leaf(1.0, "x");
+        let mut expr = Expr::new_leaf(1.0);
         expr.is_learnable = false;
         expr.learn(1e-01);
 
@@ -1331,18 +1332,18 @@ mod tests {
 
     #[test]
     fn test_find_simple() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.tanh("tanh(x)");
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
 
         let found = expr2.find("x");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().name, "x");
+        assert_eq!(found.unwrap().name, Some("x".to_string()));
     }
 
     #[test]
     fn test_find_not_found() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.tanh("tanh(x)");
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
 
         let found = expr2.find("y");
         assert!(found.is_none());
@@ -1350,9 +1351,9 @@ mod tests {
 
     #[test]
     fn test_sum_iterator() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = Expr::new_leaf(2.0, "y");
-        let expr3 = Expr::new_leaf(3.0, "z");
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let expr3 = Expr::new_leaf(3.0);
 
         let sum: Expr = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
         assert_eq!(sum.result, 6.0);
@@ -1360,12 +1361,12 @@ mod tests {
 
     #[test]
     fn test_find_after_clone() {
-        let expr = Expr::new_leaf(1.0, "x");
-        let expr2 = expr.tanh("tanh(x)");
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
         let expr2_clone = expr2.clone();
 
         let found = expr2_clone.find("x");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().name, "x");
+        assert_eq!(found.unwrap().name, Some("x".to_string()));
     }
 }

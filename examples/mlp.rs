@@ -14,9 +14,9 @@ use alpha_micrograd_rust::value::Expr;
 
 fn main() {
     let mut targets = vec![
-        Expr::new_leaf(150.0, "t1"),
-        Expr::new_leaf(250.0, "t2"),
-        Expr::new_leaf(350.0, "t3"),
+        Expr::new_leaf_with_name(150.0, "t1"),
+        Expr::new_leaf_with_name(250.0, "t2"),
+        Expr::new_leaf_with_name(350.0, "t3"),
     ];
     targets.iter_mut().for_each(|target| {
         target.is_learnable = false;
@@ -34,19 +34,19 @@ fn main() {
 
     let mut inputs = vec![
         vec![
-            Expr::new_leaf(1.0, "x_1,1"),
-            Expr::new_leaf(2.0, "x_1,2"),
-            Expr::new_leaf(3.0, "x_1,3"),
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(2.0),
+            Expr::new_leaf(3.0),
         ],
         vec![
-            Expr::new_leaf(4.0, "x_2,1"),
-            Expr::new_leaf(5.0, "x_2,2"),
-            Expr::new_leaf(6.0, "x_2,3"),
+            Expr::new_leaf(4.0),
+            Expr::new_leaf(5.0),
+            Expr::new_leaf(6.0),
         ],
         vec![
-            Expr::new_leaf(7.0, "x_3,1"),
-            Expr::new_leaf(8.0, "x_3,2"),
-            Expr::new_leaf(9.0, "x_3,3"),
+            Expr::new_leaf(7.0),
+            Expr::new_leaf(8.0),
+            Expr::new_leaf(9.0),
         ],
     ];
 
@@ -65,7 +65,7 @@ fn main() {
         .map(|(i, mut y)| {
             // the result is a vector but it's a single value because we specified 1 output neuron
             let mut result = y.remove(0);
-            result.name = format!("y{:}", i + 1).to_string();
+            result.name = Some(format!("y{:}", i + 1));
             result
         })
         // collect them into a single vector

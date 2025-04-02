@@ -64,13 +64,12 @@ impl Neuron {
 
         let weights = (1..=n_inputs)
             .map(|_| between.sample(&mut rng))
-            .enumerate()
-            .map(|(i, n)| Expr::new_leaf(n, &format!("w_{:}", i)))
+            .map(|n| Expr::new_leaf(n))
             .collect();
 
         Neuron {
             w: weights,
-            b: Expr::new_leaf(between.sample(&mut rng), "b"),
+            b: Expr::new_leaf(between.sample(&mut rng)),
             activation,
         }
     }
@@ -86,7 +85,7 @@ impl Neuron {
             "Number of inputs must match number of weights"
         );
 
-        let mut sum = Expr::new_leaf(0.0, "0.0");
+        let mut sum = Expr::new_leaf(0.0);
 
         // cloning to avoid consuming these values that we need to keep
         for (i, x_i) in x.iter().enumerate() {
@@ -96,8 +95,8 @@ impl Neuron {
         let sum = sum + self.b.clone();
         match self.activation {
             Activation::None => sum,
-            Activation::ReLU => sum.relu("activation"),
-            Activation::Tanh => sum.tanh("activation"),
+            Activation::ReLU => sum.relu(),
+            Activation::Tanh => sum.tanh(),
         }
     }
 }
@@ -209,9 +208,9 @@ mod tests {
         let n = Neuron::new(3, Activation::None);
 
         let x = vec![
-            Expr::new_leaf(0.0, "x_1"),
-            Expr::new_leaf(1.0, "x_2"), 
-            Expr::new_leaf(2.0, "x_3")
+            Expr::new_leaf(0.0),
+            Expr::new_leaf(1.0), 
+            Expr::new_leaf(2.0)
         ];
 
         let _ = n.forward(x);
@@ -230,9 +229,9 @@ mod tests {
         let l = Layer::new(3, 2, Activation::Tanh);
 
         let x = vec![
-            Expr::new_leaf(0.0, "x_1"),
-            Expr::new_leaf(1.0, "x_2"),
-            Expr::new_leaf(2.0, "x_3")
+            Expr::new_leaf(0.0),
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(2.0)
         ];
 
         let y = l.forward(x);
@@ -264,9 +263,9 @@ mod tests {
             1, Activation::None);
 
         let x = vec![
-            Expr::new_leaf(0.0, "x_1"),
-            Expr::new_leaf(1.0, "x_2"),
-            Expr::new_leaf(2.0, "x_3")
+            Expr::new_leaf(0.0),
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(2.0)
         ];
 
         let y = m.forward(x);
@@ -281,10 +280,10 @@ mod tests {
             1, Activation::None);
 
         let mut inputs = vec![
-            vec![Expr::new_leaf(2.0, "x_1,1"), Expr::new_leaf(3.0, "x_1,2"), Expr::new_leaf(-1.0, "x_1,3")],
-            vec![Expr::new_leaf(3.0, "x_2,1"), Expr::new_leaf(-1.0, "x_2,2"), Expr::new_leaf(0.5, "x_2,3")],
-            vec![Expr::new_leaf(0.5, "x_3,1"), Expr::new_leaf(1.0, "x_3,2"), Expr::new_leaf(1.0, "x_3,3")],
-            vec![Expr::new_leaf(1.0, "x_4,1"), Expr::new_leaf(1.0, "x_4,2"), Expr::new_leaf(-1.0, "x_4,3")],
+            vec![Expr::new_leaf(2.0), Expr::new_leaf(3.0), Expr::new_leaf(-1.0)],
+            vec![Expr::new_leaf(3.0), Expr::new_leaf(-1.0), Expr::new_leaf(0.5)],
+            vec![Expr::new_leaf(0.5), Expr::new_leaf(1.0), Expr::new_leaf(1.0)],
+            vec![Expr::new_leaf(1.0), Expr::new_leaf(1.0), Expr::new_leaf(-1.0)],
         ];
 
         // make these non-learnable
@@ -295,10 +294,10 @@ mod tests {
         );
 
         let mut targets = vec![
-            Expr::new_leaf(1.0, "y_1"),
-            Expr::new_leaf(-1.0, "y_2"),
-            Expr::new_leaf(-1.0, "y_3"),
-            Expr::new_leaf(1.0, "y_4"),
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(-1.0),
+            Expr::new_leaf(-1.0),
+            Expr::new_leaf(1.0),
         ];
         // make these non-learnable
         targets.iter_mut().for_each(|target| target.is_learnable = false);
@@ -318,10 +317,10 @@ mod tests {
                 let mut diff = p.clone() - t.clone();
                 diff.is_learnable = false;
 
-                let mut squared_exponent = Expr::new_leaf(2.0, "2");
+                let mut squared_exponent = Expr::new_leaf(2.0);
                 squared_exponent.is_learnable = false;
 
-                let mut mse = diff.clone().pow(squared_exponent, "mse");
+                let mut mse = diff.clone().pow(squared_exponent);
                 mse.is_learnable = false;
 
                 mse

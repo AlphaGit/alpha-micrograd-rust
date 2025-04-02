@@ -25,8 +25,7 @@ fn get_random_row(n_inputs: u32) -> Vec<Expr> {
     let mut rng = thread_rng();
     (1..=n_inputs)
         .map(|_| between.sample(&mut rng))
-        .enumerate()
-        .map(|(i, n)| Expr::new_leaf(n, &format!("w_{:}", i)))
+        .map(|n| Expr::new_leaf(n))
         .collect()
 }
 
