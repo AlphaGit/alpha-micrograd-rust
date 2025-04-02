@@ -1,1 +1,2 @@
-CARGO_PROFILE_BENCH_DEBUG=true cargo flamegraph --root --bench matmul -o matmul-baseline.svg -- --bench
+CARGO_PROFILE_BENCH_DEBUG=true cargo flamegraph --root --bench criterion -o matmul.svg -- --bench matmul
+CARGO_PROFILE_BENCH_DEBUG=true cargo flamegraph --root --bench criterion -o itersum.svg -- --bench itersum

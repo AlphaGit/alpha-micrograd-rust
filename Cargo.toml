@@ -19,6 +19,9 @@ maintenance = { status = "experimental" }
 [dev-dependencies]
 criterion = "0.5.1"
 
+[lib]
+bench = false
+
 [[bench]]
-name = "matmul"
+name = "criterion"
 harness = false

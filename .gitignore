@@ -1,2 +1,6 @@
-/target
-!/target/criterion
+/target/
+!/target/criterion/
+/target/criterion/*/new/
+/target/criterion/*/report/
+
+.DS_Store

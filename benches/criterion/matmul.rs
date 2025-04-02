@@ -1,6 +1,6 @@
 use alpha_micrograd_rust::value::Expr;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, Throughput};
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
 
 pub fn mat_mul(xs: &Vec<Vec<Expr>>, w: &Vec<Vec<Expr>>) -> Vec<Vec<Expr>> {
@@ -35,20 +35,18 @@ fn get_random_matrix(n_inputs: u32, n_rows: u32) -> Vec<Vec<Expr>> {
         .collect()
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("matmul", |b| {
+pub(crate) fn criterion_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("operations");
+    group.throughput(Throughput::Elements(25 * 25 * 2));
+    group.bench_function("matmul", |b| {
         b.iter_batched(|| {
             let matrix1 = get_random_matrix(25, 25);
             let matrix2 = get_random_matrix(25, 25);
             return (matrix1, matrix2);
         }, |(matrix1, matrix2)| {
-            mat_mul(&matrix1, &matrix2);
+            mat_mul(&matrix1, &matrix2)
         }, BatchSize::LargeInput);
     });
+    group.finish();
 }
-
-criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);
-
-
 
