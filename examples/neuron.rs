@@ -59,4 +59,10 @@ fn main() {
     }
 
     println!("Final values: {:}", neuron);
+
+    println!();
+    println!("Tree representation of the loss function:");
+    println!("--------------------------------------------------");
+    loss.print_tree();
+    println!("--------------------------------------------------");
 }

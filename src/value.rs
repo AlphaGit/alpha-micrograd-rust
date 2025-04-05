@@ -4,6 +4,7 @@
 //! - [`Expr`]: a node in the expression tree
 #![deny(missing_docs)]
 use std::collections::VecDeque;
+use std::fmt::{Formatter, Display};
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
 
@@ -29,6 +30,25 @@ impl Operation {
             Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => assert_eq!(expr_type, ExprType::Unary),
             _ => assert_eq!(expr_type, ExprType::Binary),
         }
+    }
+}
+
+impl Display for Operation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let op = match self {
+            Operation::None => "(Constant)",
+            Operation::Add => "Addition",
+            Operation::Sub => "Subtraction",
+            Operation::Mul => "Multiplication",
+            Operation::Div => "Division",
+            Operation::Tanh => "tanh",
+            Operation::Exp => "exp",
+            Operation::Pow => "Power",
+            Operation::ReLU => "ReLU",
+            Operation::Log => "log",
+            Operation::Neg => "Negation",
+        };
+        write!(f, "{}", op)
     }
 }
 
@@ -538,6 +558,46 @@ impl Expr {
         }
 
         count
+    }
+
+    /// Prints the expression tree in a human-readable format with ASCII art
+    pub fn print_tree(&self) {
+        self.print_tree_internal("", false, true);
+    }
+
+    fn print_tree_internal(&self, prefix: &str, is_tail: bool, is_root: bool) {
+        let operation_string = if self.is_learnable { "(Parameter)".to_string() } else { self.operation.to_string() };
+        let name_string = if let Some(name) = &self.name { format!("({})", name) } else { "(unnamed)".to_string() };
+    
+        if is_root {
+            println!("{} {} = {}", name_string, operation_string, self.result);
+        } else {
+            println!(
+                "{}{}── {} {} = {}",
+                prefix,
+                if is_tail { "└" } else { "├" },
+                name_string,
+                operation_string,
+                self.result
+            );
+        }
+
+        let new_prefix;
+        if is_root {
+            new_prefix = "".to_string();
+        } else if is_tail {
+            new_prefix = format!("{}    ", prefix);
+        } else {
+            new_prefix = format!("{}{}", prefix, if is_tail { "    " } else { "│   " });
+        }
+
+        if let Some(operand1) = &self.operand1 {
+            operand1.print_tree_internal(&new_prefix, self.operand2.is_none(), false);
+        }
+
+        if let Some(operand2) = &self.operand2 {
+            operand2.print_tree_internal(&new_prefix, true, false);
+        }
     }
 }
 
@@ -1368,5 +1428,5 @@ mod tests {
         let found = expr2_clone.find("x");
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, Some("x".to_string()));
-    }
+    }    
 }

@@ -17,4 +17,10 @@ fn main() {
     let squared_diff = difference.pow(square_exponent);
 
     println!("squared difference: {:.2}", squared_diff.result);
+    println!();
+
+    println!("Tree representation of the squared difference:");
+    println!("--------------------------------------------------");
+    squared_diff.print_tree();
+    println!("--------------------------------------------------");
 }

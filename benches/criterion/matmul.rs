@@ -36,13 +36,14 @@ fn get_random_matrix(n_inputs: u32, n_rows: u32) -> Vec<Vec<Expr>> {
 }
 
 pub(crate) fn criterion_benchmark(c: &mut Criterion) {
+    let n_inputs = 100;
     let mut group = c.benchmark_group("operations");
-    group.throughput(Throughput::Elements(25 * 25 * 2));
+    group.throughput(Throughput::Elements(n_inputs as u64 * n_inputs as u64));
     group.bench_function("matmul", |b| {
         b.iter_batched(|| {
-            let matrix1 = get_random_matrix(25, 25);
-            let matrix2 = get_random_matrix(25, 25);
-            return (matrix1, matrix2);
+            let matrix1 = get_random_matrix(n_inputs, n_inputs);
+            let matrix2 = get_random_matrix(n_inputs, n_inputs);
+            (matrix1, matrix2)
         }, |(matrix1, matrix2)| {
             mat_mul(&matrix1, &matrix2)
         }, BatchSize::LargeInput);
