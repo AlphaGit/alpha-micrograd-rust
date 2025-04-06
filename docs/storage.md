@@ -80,3 +80,113 @@ For our case, this would result in a lot of Nones because our trees are highly u
             - multiple neurones being sent to a single activation function
                 - but is this how they're connected at the low level?
 
+---
+
+Now that the algorithm is working, let's define the structures that we'd use to implement this:
+
+If the vector array was contained by the Expr (value) structures, only one of them would be able to mutate them. Maybe this is good enough, as these kind of operations should happen from the root only.
+
+Another alternative is to have a single aggregating entity that worked like a container for all the expressions. This could be similar to tensorflow's Session() object. If we went this route, then the operations would not happen against the expressions directly (exprA + exprB) but rather should be operations on the session itself -- but this would give the wrong sensation that the operation is happening on the whole tree.
+
+```rust
+let session = Session::new();
+// this could initialize the session with an empty tree
+
+session.add_root(expr);
+// doing this would define the root... but what would it do if called repeatedly?
+
+session.add_element(expr);
+// this could define the root... but otherwise it would add an orphan element? Might not be a good idea to have disjointed trees.
+
+session.set_tree(expr);
+// this could either set the root or a whole tree, replacing the existing one, but the naming is weird, as tree is a leaky abstraction here
+
+session.set_contents(expr);
+// this one feels better
+
+// at this point, the session itself could behave like an expression, with operations adding and replacing the root
+
+let b = session + expr;
+// this feels like a natural interface, but at this point, it's the same as the Expr behaviour we have today
+
+let expr = Expr::new(1.0); // generates a tree with a single element
+let expr2 = Expr::new(2.0); // generates a tree with a single element
+let exprSum = expr + expr2; // this would merge the trees and generate a new one
+// but merging the trees requires having references to each vector element
+// if these are owned by the vector, both expr and expr2 should be owned under exprSum (this is feasible).
+// if these are just referenced by the vector, all of exprSum, expr and expr2 would keep their own prolongued existence
+// which sounds very useful but what would it mean for these elements to be re-processed? each individual tree would end up mutating them and the results would be... weird.
+```
+
+Since owning sounds like a better idea, the result of an operation should get ownership of the other operands and merge their trees:
+
+- any unary operation: add root, add existing subtree to left side
+    - tanh 
+    - relu
+    - exp
+    - pow
+    - log
+    - neg
+- recalculate: go from left to right (leaves to root) and calculate new values
+    - calculate a value:
+        - get child 1 (math operation, then indexing)
+        - get child 2 (math operation, then indexing)
+        - calculate operation and store in current index
+    - used in training
+    - used in inference
+- learn: (backpropagation) go from right to left (root to leaves) and calculate new values for gradients
+    - get current gradiend
+    - get child 1 (math operation, then indexing)
+    - get child 2  (math operation, then indexing)
+    - set new gradient value to child 1
+    - set new gradient value to child 2*(1)
+    - used in training only
+- find: find an element in the array
+    - might be improved as a hashmap of strings --> indexes
+- find_mut: same
+- parametr_count: count non-None vector elements
+    - can be pre-calculated as the tree will not change frequently
+    - however, this operation would not be used very frequently
+    - but the drawback is a single u32 value
+- print_tree: go from right to left (root to leaves) and print the node information
+- any binary operation: merge two trees (algorithm above), add a new root
+    - add
+    - mul
+    - sub
+    - div
+- sum: (multiple disjointed values)
+    - doing multiple adds would be very inefficient
+    - but having more than 2 child nodes would break the binary tree struture
+        - we need this for vector indexing
+    - maybe we can accomodate all of these into a right tree-structure structure
+        - but maybe others have both children too
+    - we have these combinations of possible parameters
+        - leaf + leaf --> can right align to the tree
+        - leaf + unary --> can right align to the tree (unary's child will be left-aligned)
+        - left + binary --> regular add (new root, children at both sides)
+        - unary + leaf --> same as leaf + unary
+        - unary + unary --> can right align
+        - unary + binary --> regular add (new root, children at both sides)
+        - binary + leaf --> regular add (new root, children at both sides)
+        - binary + unary --> regular add (new root, children at both sides)
+        - binary + binary --> regular add (new root, children at both sides)
+    - it seems we need to fallback to the regular adding algorithm whenever a binary value is involved
+    - because addition is commutative, we can align all leaf + unary in a single branch and then fallback to regular addition with the rest of the binaries
+
+
+*(1): This might incur into a problem of double borrowing but we can get around it by using a single mutable borrow at a time:
+
+```rust
+let mut v = vec![1, 2, 3, 4, 5];
+
+{
+    let mut a = v.get_mut(1).unwrap();
+    dbg!(a);
+}
+
+{
+    let mut b = v.get_mut(2).unwrap();
+    dbg!(b);
+}
+```
+
