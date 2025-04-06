@@ -190,3 +190,79 @@ let mut v = vec![1, 2, 3, 4, 5];
 }
 ```
 
+---
+
+Structures:
+
+```rust
+struct Expr {
+    tree: Vec<ExprNode>
+}
+
+struct ExprNode {
+    operation: Operation,
+    result: f64,
+    is_learnable: bool,
+    grad: f64
+}
+```
+
+---
+
+Adding a new root to a tree, moving the subtree to the left side:
+
+Example: (index, node)
+
+      0
+      A
+  1       2
+  B       C
+3    4  5   6
+D    E  F   G
+
+Adding Z as a root would now become (x: None)
+
+              0
+              Z
+        1           2
+        A           x
+    3     4      5     6
+    B     C      x     x
+7    8  9   10 11 12 13 14
+D    E  F    G  x  x  x  x
+
+(premature optimization: we can save storing 11-14)
+
+The values became:
+- new root --> 0
+- 0 --> 1 (+1)
+- 1 --> 3 (+2)
+- 2 --> 4 (+2)
+- 3 --> 7 (+4)
+- 4 --> 8 (+4)
+- 5 --> 9 (+4)
+- 6 --> 10 (+4)
+
+If there was a child to D, it'd be 7 --> 15 (+8)
+
+So the repositioning algorithm is:
+
+- get level number from index
+    - root: level 0
+    - floor(log(i)/log(2))
+    - optimization: count position of last on bit (right to left)
+- add 2**level to index
+    - optimization:
+        - if turn on next off bit
+
+index mapping in binary:
+
+- newr + 0000 -> 0000
+- 0000 + 0001 -> 0001
+- 0001 + 0010 -> 0011
+- 0010 + 0010 -> 0100
+- 0011 + 0100 -> 0111
+- 0100 + 0100 -> 1000
+- 0101 + 0100 -> 1001
+- 0110 + 0100 -> 1010
+- 0111 + 1000 -> 1111
