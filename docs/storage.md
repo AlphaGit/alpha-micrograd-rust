@@ -272,40 +272,65 @@ Doing the same exercise but with reversed-order trees:
 
 Example: (index, node)
 
-      6
-      A
-  5       4
-  B       C
-3    2  1   0
-D    E  F   G
+      6                   6
+      A                   x
+  5       4           5       4
+  B       C           x       x
+3    2  1   0       3   2   1   0
+D    E  F   G       x   x   x   x
 
 Adding Z as a root would now become (x: None)
 
              14
-              Z
+              Z                -> level 1 (new)
         13         12
-        A           x
+        A           x          -> level 2
     11   10      9     8
-    B     C      x     x
-7    6  5    4  3  2  1  0
-D    E  F    G  x  x  x  x
+    B     C      x     x       -> level 3
+7    6  5   4   3  2  1  0
+D    E  F   G   x  x  x  x     -> level 4
 
 Let's analyze the pattern for index mapping when adding a new root in reverse-order trees:
 
-- old index 6 (A) -> new index 13 (A)
-- old index 5 (B) -> new index 11 (B)
-- old index 4 (C) -> new index 10 (C)
-- old index 3 (D) -> new index 7 (D)
-- old index 2 (E) -> new index 6 (E)
-- old index 1 (F) -> new index 5 (F)
-- old index 0 (G) -> new index 4 (G)
+nodes_in_level = 2^(level - 1)
+nodes in level 4: 8, starting at 0              = 0000
+nodes in level 3: 4, starting at 8 (0 + 8)      = 1000
+nodes in level 2: 2, starting at 12 (8 + 4)     = 1100
+nodes in level 1: 1, starting at 14 (8 + 4 + 2) = 1110
+
+right side tree:
+- level 3 (nodes_in_level = 4) -> index + 0 + 0
+    - old index 0 -> new index 0
+    - old index 1 -> new index 1
+    - old index 2 -> new index 2
+    - old index 3 -> new index 3
+- level 2 (nodes_in_level = 2) -> index + 4 + 0
+    - old index 4 -> new index 8
+    - old index 5 -> new index 9
+- level 1 (nodes_in_level = 1) -> index + 6 + 0
+    - old index 6 -> new index 12
+
+left side tree:
+- level 3 (nodes_in_level = 4) -> index + 0 + nodes_in_level
+    - old index 0 (G) -> new index 4 (G)
+    - old index 1 (F) -> new index 5 (F)
+    - old index 2 (E) -> new index 6 (E)
+    - old index 3 (D) -> new index 7 (D)
+- level 2 (nodes_in_level = 2) -> index + 4 + nodes_in_level
+    - old index 4 (C) -> new index 10 (C)
+    - old index 5 (B) -> new index 11 (B)
+- level 1 (nodes_in_level = 1) -> index + 6 + nodes_in_level
+    - old index 6 (A) -> new index 13 (A)
+
+new root: 14
+
 
 Smaller example:
 
-  2
-  A
-1   0
-B   C
+  2         2
+  A         x
+1   0     1   0
+B   C     x   x
 
 Adding root:
 
@@ -316,9 +341,22 @@ Adding root:
 3  2  1  0
 B  C  x  x
 
-- old index 2 (A) -> new index 6 (A)
-- old index 1 (B) -> new index 3 (B)
-- old index 0 (C) -> new index 2 (C)
+right side tree:
+- last level
+    - old index 0 (x) -> new index 0 (x)
+    - old index 1 (x) -> new index 1 (x)
+- last level - 1
+    - old index 2 (x) -> new index 4 (x)
+
+left side tree:
+
+- last level
+    - old index 0 (C) -> new index 2 (C)
+    - old index 1 (B) -> new index 3 (B)
+- last level - 1
+    - old index 2 (A) -> new index 5 (A)
+
+new root: 6
 
 ---
 
@@ -402,3 +440,31 @@ left child of A: -len+2i
 right child of A: -len+2i-1
     = ...
     = 0 (correct)
+
+----------
+
+
+tree a + tree b
+
+we want result to logically be represented as
+
+    result
+tree a  tree b
+
+because our order is reversed, the vector repreentation will have tree b consumed first
+
+tree a:             2a 1a 0a
+tree b: 6b 5b 4b 3b 2b 1b 0b
+
+result: 6b 5b 4b 3b x x x x  2b 1b 2a 1a 0b 0a R
+
+algorithm:
+- levels_a = log2(len(tree_a + 1))
+- levels_b = log2(len(tree_b + 1))
+- level_current = max(levels_a, levels_b)
+- new_tree = []
+- while level_current > 0
+    - nodes_in_level = 2^(level_current-1)
+    - new_tree.extend(tree_b.take(nodes_in_level) or repeatNone(nodes_in_level))
+    - new_tree.extend(tree_a.take(nodes_in_level) or repeatNone(nodes_in_level))
+    
