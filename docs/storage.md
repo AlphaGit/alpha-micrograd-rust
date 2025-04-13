@@ -235,15 +235,15 @@ D    E  F    G  x  x  x  x
 
 The values became:
 - new root --> 0
-- 0 --> 1 (+1)
-- 1 --> 3 (+2)
-- 2 --> 4 (+2)
-- 3 --> 7 (+4)
-- 4 --> 8 (+4)
-- 5 --> 9 (+4)
-- 6 --> 10 (+4)
+- 0 (level 1) --> 1 (+1)
+- 1 (level 2) --> 3 (+2)
+- 2 (level 2) --> 4 (+2)
+- 3 (level 3) --> 7 (+4)
+- 4 (level 3) --> 8 (+4)
+- 5 (level 3) --> 9 (+4)
+- 6 (level 3) --> 10 (+4)
 
-If there was a child to D, it'd be 7 --> 15 (+8)
+If there was a child to D, it'd be 7 (level 4) --> 15 (+8)
 
 So the repositioning algorithm is:
 
@@ -251,9 +251,8 @@ So the repositioning algorithm is:
     - root: level 0
     - floor(log(i)/log(2))
     - optimization: count position of last on bit (right to left)
-- add 2**level to index
-    - optimization:
-        - if turn on next off bit
+- add 2**(level-1) to index
+    - optimization: ?
 
 index mapping in binary:
 
@@ -266,3 +265,140 @@ index mapping in binary:
 - 0101 + 0100 -> 1001
 - 0110 + 0100 -> 1010
 - 0111 + 1000 -> 1111
+
+----
+
+Doing the same exercise but with reversed-order trees:
+
+Example: (index, node)
+
+      6
+      A
+  5       4
+  B       C
+3    2  1   0
+D    E  F   G
+
+Adding Z as a root would now become (x: None)
+
+             14
+              Z
+        13         12
+        A           x
+    11   10      9     8
+    B     C      x     x
+7    6  5    4  3  2  1  0
+D    E  F    G  x  x  x  x
+
+Let's analyze the pattern for index mapping when adding a new root in reverse-order trees:
+
+- old index 6 (A) -> new index 13 (A)
+- old index 5 (B) -> new index 11 (B)
+- old index 4 (C) -> new index 10 (C)
+- old index 3 (D) -> new index 7 (D)
+- old index 2 (E) -> new index 6 (E)
+- old index 1 (F) -> new index 5 (F)
+- old index 0 (G) -> new index 4 (G)
+
+Smaller example:
+
+  2
+  A
+1   0
+B   C
+
+Adding root:
+
+    6
+    Z
+  5    4
+  A    x
+3  2  1  0
+B  C  x  x
+
+- old index 2 (A) -> new index 6 (A)
+- old index 1 (B) -> new index 3 (B)
+- old index 0 (C) -> new index 2 (C)
+
+---
+
+In a regular (root-first) array representation of a tree:
+
+- for a node in ith location
+    - left child is at: 2i + 1
+    - right child is at: 2i + 2
+    - parent is at floor((i-1)/2)
+
+if the tree is reversed, then every i corresponds to the other side (len-1-i)
+
+    - left child is at: len-1-(2(len-1-i)+1)
+        = len-1-2(len-1-i)-1
+        = len-1-2len+2+2i-1
+        = -len-1+2+2i-1
+        = -len+2i-1+2-1
+        = -len+2i
+    - right child is at: len-1-(2(len-1-i)+2)
+        = len-1-2(len-1-i)-2
+        = len-1-2len+2+2i-2
+        = -len-1+2+2i-2
+        = -len-1+2i
+        = -len+2i-1
+    - parent is at len-1-floor((len-1-i-1)/2)
+        = len-1-floor((len-i-2)/2)
+
+        consider that: floor(x) + k = floor(x+k)
+        https://math.stackexchange.com/questions/1086156/distribution-and-other-rules-for-floor-and-ceiling
+
+        = -floor((len-i-2)/2 + len-1)
+        = -floor((len-i-2)/2 + (2len-2)/2)
+        = -floor(((len-i-2)+(2len-2)))/2
+        = -floor((3len-i-4)/2)
+
+testing this out:
+
+    6
+    Z
+  5    4
+  A    X
+3  2  1  0
+B  C  T  U
+
+left child of Z: -len+2i
+    = -7+2*6
+    = -7+12
+    = 5 (correct)
+right child of Z: -len+2i-1
+    = -7+2*6-1
+    = -7+12-1
+    = 4 (correct)
+
+left child of A: -len+2i
+    = -7+2*5
+    = -7+10
+    = 3 (correct)
+right child of A: -len+2i-1
+    = ...
+    = 2 (correct)
+
+left child of X: -len+2i
+    = -7+2*4
+    = -7+8
+    = 1 (correct)
+right child of X: -len+2i-1
+    = ...
+    = 0 (correct)
+
+Another tree:
+
+    2
+    A
+1       0
+B       C
+
+left child of A: -len+2i
+    = -3+2*2
+    = -3+4
+    = 1 (correct)
+right child of A: -len+2i-1
+    = ...
+    = 0 (correct)
