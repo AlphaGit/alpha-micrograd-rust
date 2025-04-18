@@ -390,6 +390,80 @@ fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
     }
 }
 
+/// Implements the [`Add`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the addition of two [`Expr`] objects.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
+/// 
+/// let result = expr + expr2;
+/// 
+/// assert_eq!(result.result(), 3.0);
+/// ```
+impl Add for Expr {
+    type Output = Expr;
+
+    fn add(self, other: Expr) -> Expr {
+        let result = self.result() + other.result();
+        let new_root = ExprNode {
+            operation: Operation::Add,
+            result,
+            is_learnable: true,
+            grad: 0.0
+        };
+        merge_trees(self, other, new_root)
+    }
+}
+
+/// Implements the [`Add`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the addition of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let result = expr + 2.0;
+/// 
+/// assert_eq!(result.result(), 3.0);
+/// ```
+impl Add<f64> for Expr {
+    type Output = Expr;
+
+    fn add(self, other: f64) -> Expr {
+        let operand2 = Expr::new_leaf(other);
+        self + operand2
+    }
+}
+
+/// Implements the [`Add`] trait for the [`f64`] type, when the right operand is an [`Expr`].
+/// 
+/// This implementation allows the addition of a [`f64`] value and an [`Expr`] object.
+/// 
+/// Example:
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let result = 2.0 + expr;
+/// 
+/// assert_eq!(result.result(), 3.0);
+/// ```
+impl Add<Expr> for f64 {
+    type Output = Expr;
+
+    fn add(self, other: Expr) -> Expr {
+        let operand1 = Expr::new_leaf(self);
+        operand1 + other
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,5 +616,33 @@ mod tests {
 
         assert_eq!(expr2.result(), -2.0);
         assert_eq!(expr2.operation(), Operation::Neg);
+    }
+
+    #[test]
+    fn test_add() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let expr3 = expr + expr2;
+
+        assert_eq!(expr3.result(), 3.0);
+        assert_eq!(expr3.operation(), Operation::Add);
+    }
+
+    #[test]
+    fn test_add_f64() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr + 2.0;
+
+        assert_eq!(expr2.result(), 3.0);
+        assert_eq!(expr2.operation(), Operation::Add);
+    }
+
+    #[test]
+    fn test_add_f64_expr() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = 2.0 + expr;
+
+        assert_eq!(expr2.result(), 3.0);
+        assert_eq!(expr2.operation(), Operation::Add);
     }
 }
