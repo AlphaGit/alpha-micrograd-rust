@@ -672,6 +672,36 @@ impl Div<f64> for Expr {
     }
 }
 
+/// Implements the [`Sum`] trait for the [`Expr`] struct.
+/// 
+/// Note that this implementation will generate temporary [`Expr`] objects,
+/// which may not be the most efficient way to sum a collection of [`Expr`] objects.
+/// However, it is provided as a convenience method for users that want to use sum
+/// over an [`Iterator<Expr>`].
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
+/// let expr3 = Expr::new_leaf(3.0);
+/// 
+/// let sum = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
+/// 
+/// assert_eq!(sum.result(), 6.0);
+/// ```
+impl Sum for Expr {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.reduce(|acc, x| acc + x)
+            .unwrap_or(Expr::new_leaf(0.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -927,5 +957,15 @@ mod tests {
 
         assert_eq!(expr2.result(), 2.0);
         assert_eq!(expr2.operation(), Operation::Div);
+    }
+
+    #[test]
+    fn test_sum_iterator() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = Expr::new_leaf(2.0);
+        let expr3 = Expr::new_leaf(3.0);
+
+        let sum: Expr = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
+        assert_eq!(sum.result(), 6.0);
     }
 }
