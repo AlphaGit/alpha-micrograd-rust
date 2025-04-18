@@ -169,18 +169,18 @@ impl Expr {
     }
 
     /// Applies the hyperbolic tangent function to the expression and returns it as a new expression.
-    /// 
+    ///
     /// Example:
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
-    /// 
+    ///
     /// let expr = Expr::new_leaf(1.0);
     /// let expr2 = expr.tanh();
-    /// 
+    ///
     /// assert_eq!(expr2.result, 0.7615941559557649);
     /// ```
     pub fn tanh(self) -> Expr {
-        let current_value = self.tree[0].as_ref().expect("root cannot be None").result;
+        let current_value = self.result();
         let result = current_value.tanh();
 
         let new_root = ExprNode {
@@ -194,21 +194,115 @@ impl Expr {
     }
 
     /// Applies the rectified linear unit function to the expression and returns it as a new expression.
-    /// 
+    ///
     /// Example:
     /// ```rust
     /// use alpha_micrograd_rust::value::Expr;
-    /// 
+    ///
     /// let expr = Expr::new_leaf(-1.0);
     /// let expr2 = expr.relu();
-    /// 
+    ///
     /// assert_eq!(expr2.result, 0.0);
     /// ```
     pub fn relu(self) -> Expr {
-        let current_value = self.tree[0].as_ref().expect("root cannot be None").result;
+        let current_value = self.result();
         let result = current_value.max(0.0);
         let new_root = ExprNode {
             operation: Operation::ReLU,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        };
+        add_new_root(self, new_root)
+    }
+
+    /// Applies the exponential function (e^x) to the expression and returns it as a new expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.exp();
+    ///
+    /// assert_eq!(expr2.result(), 2.718281828459045);
+    /// ```
+    pub fn exp(self) -> Expr {
+        let current_value = self.result();
+        let result = current_value.exp();
+        let new_root = ExprNode {
+            operation: Operation::Exp,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        };
+        add_new_root(self, new_root)
+    }
+
+    /// Raises the expression to the power of the given exponent (expression) and returns it as a new expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let expr = Expr::new_leaf(2.0);
+    /// let exponent = Expr::new_leaf(3.0);
+    /// let result = expr.pow(exponent);
+    ///
+    /// assert_eq!(result.result(), 8.0);
+    /// ```
+    pub fn pow(self, exponent: Expr) -> Expr {
+        let current_value = self.result();
+        let exponent_value = exponent.result();
+        let result = current_value.powf(exponent_value);
+        let new_root = ExprNode {
+            operation: Operation::Pow,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        };
+        add_new_root(self, new_root)
+    }
+
+    /// Applies the natural logarithm function to the expression and returns it as a new expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let expr = Expr::new_leaf(2.0);
+    /// let expr2 = expr.log();
+    ///
+    /// assert_eq!(expr2.result(), 0.6931471805599453);
+    /// ```
+    pub fn log(self) -> Expr {
+        let current_value = self.result();
+        let result = current_value.ln();
+        let new_root = ExprNode {
+            operation: Operation::Log,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        };
+        add_new_root(self, new_root)
+    }
+
+    /// Negates the expression and returns it as a new expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.neg();
+    ///
+    /// assert_eq!(expr2.result(), -1.0);
+    /// ```
+    pub fn neg(self) -> Expr {
+        let current_value = self.result();
+        let result = -current_value;
+        let new_root = ExprNode {
+            operation: Operation::Neg,
             result,
             is_learnable: false,
             grad: 0.0
@@ -411,5 +505,42 @@ mod tests {
 
         assert_eq!(expr2.result(), 1.0);
         assert_eq!(expr2.operation(), Operation::ReLU);
+    }
+
+    #[test]
+    fn test_exp() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.exp();
+
+        assert_eq!(expr2.result(), 2.718281828459045);
+        assert_eq!(expr2.operation(), Operation::Exp);
+    }
+
+    #[test]
+    fn test_pow() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = Expr::new_leaf(3.0);
+        let result = expr.pow(expr2);
+
+        assert_eq!(result.result(), 8.0);
+        assert_eq!(result.operation(), Operation::Pow);
+    }
+
+    #[test]
+    fn test_log() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = expr.log();
+
+        assert_eq!(expr2.result(), 0.6931471805599453);
+        assert_eq!(expr2.operation(), Operation::Log);
+    }
+
+    #[test]
+    fn test_neg() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = expr.neg();
+
+        assert_eq!(expr2.result(), -2.0);
+        assert_eq!(expr2.operation(), Operation::Neg);
     }
 }
