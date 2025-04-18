@@ -88,12 +88,12 @@ impl Expr {
     /// ```
     pub fn new_leaf(value: f64) -> Expr {
         let mut tree = Vec::with_capacity(1);
-        tree[0] = Some(ExprNode {
+        tree.push(Some(ExprNode {
             operation: Operation::None,
             result: value,
             is_learnable: true,
             grad: 0.0
-        });
+        }));
         Expr {
             tree,
             names: HashMap::new(),
@@ -138,21 +138,20 @@ impl Expr {
             grad: 0.0
         };
 
-        let new_tree = add_new_root(self.tree, new_root);
-        Expr {
-            tree: new_tree,
-            names: self.names,
-        }
+        add_new_root(self, new_root)
     }
 }
 
-fn add_new_root(subtree_a: Vec<Option<ExprNode>>, new_root: ExprNode) -> Vec<Option<ExprNode>> {
-    let mut subtree_b = Vec::with_capacity(1);
-    subtree_b.push(None);
+fn add_new_root(subtree_a: Expr, new_root: ExprNode) -> Expr {
+    let subtree_b: Expr = Expr {
+        tree: vec![None],
+        names: HashMap::new(),
+    };
+
     merge_trees(subtree_a, subtree_b, new_root)
 }
 
-fn merge_trees(mut tree_a: Expr, mut tree_b: Expr, new_root: ExprNode) -> Expr {
+fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
     let mut subtree_a = tree_a.tree;
     let mut subtree_b = tree_b.tree;
 
@@ -161,61 +160,60 @@ fn merge_trees(mut tree_a: Expr, mut tree_b: Expr, new_root: ExprNode) -> Expr {
     let len_b = subtree_b.len();
     assert!(len_a > 0, "subtree_a must not be empty");
     assert!(len_b > 0, "subtree_b must not be empty");
-    let levels_a = len_a.ilog2() + 1;
-    let levels_b = len_b.ilog2() + 1;
+    let levels_a = (len_a + 1).ilog2();
+    let levels_b = (len_b + 1).ilog2();
 
-    let mut level_number = levels_a.max(levels_b) + 1; // +1 for the new root
+    let final_level_number = levels_a.max(levels_b) + 1; // +1 for the new root
+    let final_node_count = 2_usize.pow(final_level_number) - 1;
+    dbg!(levels_a, levels_b, final_level_number, final_node_count);
 
-    let final_node_count = 2_usize.pow(level_number) - 1;
     let mut new_tree = Vec::with_capacity(final_node_count);
     let mut new_names = HashMap::new();
 
-    dbg!(levels_a, levels_b, level_number, final_node_count);
-
-    let mut min_moved_index: usize = 0;
-    let mut max_moved_index: usize = 0;
-    while level_number > 0 {
-        let nodes_per_tree = 2_usize.pow(level_number - 1);
-        dbg!(level_number, nodes_per_tree);
+    let mut original_tree_section_end_index = 0;
+    let mut new_tree_section_start_index = 0;
+    for level_number in (2..=final_level_number).rev() {
+        // simplifying 2^(l-1)/2 to 2^(l-2) creates a subtraction overflow for l=1
+        let nodes_per_tree = 2_usize.pow(level_number - 1) / 2;
+        original_tree_section_end_index += nodes_per_tree;
+        dbg!(level_number, nodes_per_tree, original_tree_section_end_index);
 
         // extract nodes for this level for tree_b (right side)
-        let mut level_b = if levels_b >= level_number {
-            subtree_b.split_off(subtree_b.len() - nodes_per_tree)
+        let mut nodes_b = if levels_b + 1 >= level_number {
+            subtree_b.drain(..nodes_per_tree).collect()
         } else {
-            (1..nodes_per_tree).map(|_| None).collect::<Vec<Option<ExprNode>>>()
+            (0..nodes_per_tree).map(|_| None).collect::<Vec<Option<ExprNode>>>()
         };
-        new_tree.append(&mut level_b);
+        new_tree.append(&mut nodes_b);
 
-        // renaming name mappings for tree_b, for this level
-        mat_moved_index = 2_usize.pow(level_number - 1) - 1;
+        tree_b.names.iter()
+            .filter(|(_, &index)| index < original_tree_section_end_index)
+            .for_each(|(name, old_index)| {
+                let new_index = old_index + new_tree_section_start_index;
+                new_names.insert(name.clone(), new_index);
+            });
 
-        let nodes_in_this_level = 2_usize.pow(level_number - 1);
-        dbg!(level_number, nodes_in_this_level);
-
-        let mut level_a = if levels_a >= level_number {
-            subtree_a.split_off(subtree_a.len() - nodes_per_tree)
+        let mut nodes_a = if levels_a + 1 >= level_number {
+            subtree_a.drain(..nodes_per_tree).collect()
         } else {
-            (1..nodes_per_tree).map(|_| None).collect::<Vec<Option<ExprNode>>>()
+            (0..nodes_per_tree).map(|_| None).collect::<Vec<Option<ExprNode>>>()
         };
+        new_tree.append(&mut nodes_a);
 
-        new_tree.append(&mut level_a);
+        tree_a.names.iter()
+            .filter(|(_, &index)| index < original_tree_section_end_index)
+            .map(|(name, old_index)| (name.clone(), old_index + new_tree_section_start_index + nodes_per_tree))
+            .for_each(|(name, new_index)| {
+                new_names.insert(name, new_index);
+            });
 
-        let level_min_old_index = 2_usize.pow(level_number - 1) - 1;
-        let level_max_old_index = 2_usize.pow(level_number) - 1 - 1;
-
-        tree_a.names.extract_if(|_, old_index| {
-            return *old_index >= level_min_old_index && *old_index <= level_max_old_index;
-        }).for_each(|(name, old_index)| {
-            let new_index = old_index - level_min_old_index + new_tree.len() - nodes_per_tree * 2;
-            new_names.insert(name, new_index);
-        });
-
-        level_number -= 1;
+        new_tree_section_start_index += nodes_per_tree * 2;
     }
 
-    new_tree.append(&mut subtree_a);
-    new_tree.append(&mut subtree_b);
     new_tree.push(Some(new_root));
+
+    assert_eq!(new_tree.len(), final_node_count, "new_tree should have {} nodes, but has {}", final_node_count, new_tree.len());
+    assert_eq!(new_tree.capacity(), final_node_count, "new_tree should have {} capacity, but has {}", final_node_count, new_tree.capacity());
 
     Expr {
         tree: new_tree,
@@ -229,16 +227,9 @@ mod tests {
 
     #[test]
     fn test_add_new_root() {
-        let mut tree_a = Vec::new();
-        let node_a = ExprNode {
-            operation: Operation::Add,
-            result: 1.0,
-            is_learnable: true,
-            grad: 0.0
-        };
-        tree_a.push(Some(node_a));
+        let tree_a = Expr::new_leaf(1.0);
 
-        assert_eq!(tree_a.len(), 1);
+        assert_eq!(tree_a.tree.len(), 1);
 
         let new_root = ExprNode {
             operation: Operation::Mul,
@@ -248,30 +239,33 @@ mod tests {
         };
 
         let merged_tree = add_new_root(tree_a, new_root);
-        assert_eq!(merged_tree.len(), 3);
+        assert_eq!(merged_tree.tree.len(), 3);
+        assert!(merged_tree.tree[0].is_none());
+        assert_eq!(merged_tree.tree[1].as_ref().unwrap().result, 1.0);
+        assert_eq!(merged_tree.tree[2].as_ref().unwrap().result, 3.0);
+    }
+
+    #[test]
+    fn test_add_new_root_with_name() {
+        let tree_a = Expr::new_leaf_with_name(1.0, "x");
+
+        let new_root = ExprNode {
+            operation: Operation::Mul,
+            result: 3.0,
+            is_learnable: true,
+            grad: 0.0
+        };
+
+        let merged_tree = add_new_root(tree_a, new_root);
+        dbg!(&merged_tree);
+        assert_eq!(merged_tree.names.len(), 1);
+        assert_eq!(merged_tree.names.get("x"), Some(&1));
     }
 
     #[test]
     fn test_merge_trees() {
-        let mut tree_a = Vec::new();
-        let mut tree_b = Vec::new();
-
-        let node_a = ExprNode {
-            operation: Operation::Add,
-            result: 1.0,
-            is_learnable: true,
-            grad: 0.0
-        };
-
-        let node_b = ExprNode {
-            operation: Operation::Sub,
-            result: 2.0,
-            is_learnable: true,
-            grad: 0.0
-        };
-
-        tree_a.push(Some(node_a));
-        tree_b.push(Some(node_b));
+        let tree_a = Expr::new_leaf(1.0);
+        let tree_b = Expr::new_leaf(2.0);
 
         let new_root = ExprNode {
             operation: Operation::Mul,
@@ -281,6 +275,25 @@ mod tests {
         };
 
         let merged_tree = merge_trees(tree_a, tree_b, new_root);
-        assert_eq!(merged_tree.len(), 3);
+        assert_eq!(merged_tree.tree.len(), 3);
+    }
+
+    #[test]
+    fn test_merge_trees_with_names() {
+        let tree_a = Expr::new_leaf_with_name(1.0, "x");
+        let tree_b = Expr::new_leaf_with_name(2.0, "y");
+
+        let new_root = ExprNode {
+            operation: Operation::Add,
+            result: 3.0,
+            is_learnable: false,
+            grad: 0.0
+        };
+
+        let merged_tree = merge_trees(tree_a, tree_b, new_root);
+        assert_eq!(merged_tree.tree.len(), 3);
+        assert_eq!(merged_tree.names.len(), 2);
+        assert_eq!(merged_tree.names.get("x"), Some(&1));
+        assert_eq!(merged_tree.names.get("y"), Some(&0));
     }
 }
