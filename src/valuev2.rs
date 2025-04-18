@@ -3,24 +3,40 @@
 //! This package includes the following elements to construct expression trees:
 //! - [`Expr`]: a node in the expression tree
 #![deny(missing_docs)]
-#![feature(hash_extract_if)]
 use std::collections::HashMap;
 use std::fmt::{Formatter, Display};
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
 
-#[derive(Debug, Clone, PartialEq)]
-enum Operation {
+/// Represents the operation type of an expression node.
+///
+/// This enum defines the types of operations that can be performed on expression nodes.
+/// It includes binary operations (addition, subtraction, multiplication, division),
+/// unary operations (tanh, exp, ReLU, log, negation), and a None operation for leaf nodes.
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Operation {
+    /// No operation, used for leaf nodes
+    /// in the expression tree.
     None,
+    /// Addition operation.
     Add,
+    /// Subtraction operation.
     Sub,
+    /// Multiplication operation.
     Mul,
+    /// Division operation.
     Div,
+    /// Hyperbolic tangent operation.
     Tanh,
+    /// Exponential operation.
     Exp,
+    /// Power operation.
     Pow,
+    /// Rectified Linear Unit operation.
     ReLU,
+    /// Logarithm operation.
     Log,
+    /// Negation operation (-x).
     Neg,
 }
 
@@ -116,6 +132,42 @@ impl Expr {
         expr
     }
 
+    /// Returns the (current) value of the expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// assert_eq!(expr.result(), 1.0);
+    /// ```
+    pub fn result(&self) -> f64 {
+        self.tree
+            .last()
+            .expect("tree cannot be empty")
+            .as_ref()
+            .expect("root cannot be None")
+            .result
+    }
+
+    /// Returns the (current) operation of the expression.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::{Expr, Operation};
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// assert_eq!(expr.operation(), Operation::None);
+    /// ```
+    pub fn operation(&self) -> Operation {
+        self.tree
+            .last()
+            .expect("tree cannot be empty")
+            .as_ref()
+            .expect("root cannot be None")
+            .operation
+    }
+
     /// Applies the hyperbolic tangent function to the expression and returns it as a new expression.
     /// 
     /// Example:
@@ -128,8 +180,8 @@ impl Expr {
     /// assert_eq!(expr2.result, 0.7615941559557649);
     /// ```
     pub fn tanh(self) -> Expr {
-        let root_value = self.tree[0].as_ref().expect("root cannot be None").result;
-        let result = root_value.tanh();
+        let current_value = self.tree[0].as_ref().expect("root cannot be None").result;
+        let result = current_value.tanh();
 
         let new_root = ExprNode {
             operation: Operation::Tanh,
@@ -138,6 +190,29 @@ impl Expr {
             grad: 0.0
         };
 
+        add_new_root(self, new_root)
+    }
+
+    /// Applies the rectified linear unit function to the expression and returns it as a new expression.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(-1.0);
+    /// let expr2 = expr.relu();
+    /// 
+    /// assert_eq!(expr2.result, 0.0);
+    /// ```
+    pub fn relu(self) -> Expr {
+        let current_value = self.tree[0].as_ref().expect("root cannot be None").result;
+        let result = current_value.max(0.0);
+        let new_root = ExprNode {
+            operation: Operation::ReLU,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        };
         add_new_root(self, new_root)
     }
 }
@@ -225,6 +300,12 @@ fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
 mod tests {
     use super::*;
 
+    fn assert_float_eq(f1: f64, f2: f64) {
+        let places = 7;
+        let tolerance = 10.0_f64.powi(-places);
+        assert!((f1 - f2).abs() < tolerance, "{} != {} (tol: {})", f1, f2, tolerance);
+    }
+
     #[test]
     fn test_add_new_root() {
         let tree_a = Expr::new_leaf(1.0);
@@ -295,5 +376,40 @@ mod tests {
         assert_eq!(merged_tree.names.len(), 2);
         assert_eq!(merged_tree.names.get("x"), Some(&1));
         assert_eq!(merged_tree.names.get("y"), Some(&0));
+    }
+
+    #[test]
+    fn test_tanh() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.tanh();
+
+        assert_eq!(expr2.result(), 0.7615941559557649);
+        assert_eq!(expr2.operation(), Operation::Tanh);
+
+        // Some other known values
+        fn get_tanh(x: f64) -> f64 {
+            Expr::new_leaf(x).tanh().result()
+        }
+
+        assert_float_eq(get_tanh(10.74), 0.9999999);
+        assert_float_eq(get_tanh(-10.74), -0.9999999);
+        assert_float_eq(get_tanh(0.0), 0.0);
+    }
+
+    #[test]
+    fn test_relu() {
+        // negative case
+        let expr = Expr::new_leaf(-1.0);
+        let expr2 = expr.relu();
+
+        assert_eq!(expr2.result(), 0.0);
+        assert_eq!(expr2.operation(), Operation::ReLU);
+
+        // positive case
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.relu();
+
+        assert_eq!(expr2.result(), 1.0);
+        assert_eq!(expr2.operation(), Operation::ReLU);
     }
 }
