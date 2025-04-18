@@ -618,6 +618,60 @@ impl Sub<Expr> for f64 {
     }
 }
 
+/// Implements the [`Div`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the division of two [`Expr`] objects.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
+/// 
+/// let result = expr / expr2;
+/// 
+/// assert_eq!(result.result(), 0.5);
+/// ```
+impl Div for Expr {
+    type Output = Expr;
+
+    fn div(self, other: Expr) -> Expr {
+        let result = self.result() / other.result();
+        let new_root = ExprNode {
+            operation: Operation::Div,
+            result,
+            is_learnable: true,
+            grad: 0.0
+        };
+        merge_trees(self, other, new_root)
+    }
+}
+
+/// Implements the [`Div`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the division of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let result = expr / 2.0;
+/// 
+/// assert_eq!(result.result(), 0.5);
+/// ```
+impl Div<f64> for Expr {
+    type Output = Expr;
+
+    fn div(self, other: f64) -> Expr {
+        let operand2 = Expr::new_leaf(other);
+        self / operand2
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -854,5 +908,24 @@ mod tests {
 
         assert_eq!(expr2.result(), 1.0);
         assert_eq!(expr2.operation(), Operation::Sub);
+    }
+
+    #[test]
+    fn test_div() {
+        let expr = Expr::new_leaf(6.0);
+        let expr2 = Expr::new_leaf(3.0);
+        let expr3 = expr / expr2;
+
+        assert_eq!(expr3.result(), 2.0);
+        assert_eq!(expr3.operation(), Operation::Div);
+    }
+
+    #[test]
+    fn test_div_f64() {
+        let expr = Expr::new_leaf(6.0);
+        let expr2 = expr / 3.0;
+
+        assert_eq!(expr2.result(), 2.0);
+        assert_eq!(expr2.operation(), Operation::Div);
     }
 }
