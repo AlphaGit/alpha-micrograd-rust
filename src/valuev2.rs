@@ -464,6 +464,83 @@ impl Add<Expr> for f64 {
     }
 }
 
+/// Implements the [`Mul`] trait for the [`Expr`] struct.
+/// 
+/// This implementation allows the multiplication of two [`Expr`] objects.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let expr2 = Expr::new_leaf(2.0);
+/// 
+/// let result = expr * expr2;
+/// 
+/// assert_eq!(result.result(), 2.0);
+/// ```
+impl Mul for Expr {
+    type Output = Expr;
+
+    fn mul(self, other: Expr) -> Expr {
+        let result = self.result() * other.result();
+        let new_root = ExprNode {
+            operation: Operation::Mul,
+            result,
+            is_learnable: true,
+            grad: 0.0
+        };
+        merge_trees(self, other, new_root)
+    }
+}
+
+/// Implements the [`Mul`] trait for the [`Expr`] struct, when the right operand is a [`f64`].
+/// 
+/// This implementation allows the multiplication of an [`Expr`] object and a [`f64`] value.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let result = expr * 2.0;
+/// 
+/// assert_eq!(result.result(), 2.0);
+/// ```
+impl Mul<f64> for Expr {
+    type Output = Expr;
+
+    fn mul(self, other: f64) -> Expr {
+        let operand2 = Expr::new_leaf(other);
+        self * operand2
+    }
+}
+
+/// Implements the [`Mul`] trait for the [`f64`] type, when the right operand is an [`Expr`].
+/// 
+/// This implementation allows the multiplication of a [`f64`] value and an [`Expr`] object.
+/// 
+/// Example:
+/// 
+/// ```rust
+/// use alpha_micrograd_rust::valuev2::Expr;
+/// 
+/// let expr = Expr::new_leaf(1.0);
+/// let result = 2.0 * expr;
+/// 
+/// assert_eq!(result.result(), 2.0);
+/// ```
+impl Mul<Expr> for f64 {
+    type Output = Expr;
+
+    fn mul(self, other: Expr) -> Expr {
+        let operand1 = Expr::new_leaf(self);
+        operand1 * other
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -644,5 +721,33 @@ mod tests {
 
         assert_eq!(expr2.result(), 3.0);
         assert_eq!(expr2.operation(), Operation::Add);
+    }
+
+    #[test]
+    fn test_mul() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = Expr::new_leaf(3.0);
+        let expr3 = expr * expr2;
+
+        assert_eq!(expr3.result(), 6.0);
+        assert_eq!(expr3.operation(), Operation::Mul);
+    }
+
+    #[test]
+    fn test_mul_f64() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = expr * 3.0;
+
+        assert_eq!(expr2.result(), 6.0);
+        assert_eq!(expr2.operation(), Operation::Mul);
+    }
+
+    #[test]
+    fn test_mul_f64_expr() {
+        let expr = Expr::new_leaf(2.0);
+        let expr2 = 3.0 * expr;
+
+        assert_eq!(expr2.result(), 6.0);
+        assert_eq!(expr2.operation(), Operation::Mul);
     }
 }
