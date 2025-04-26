@@ -468,3 +468,94 @@ algorithm:
     - new_tree.extend(tree_b.take(nodes_in_level) or repeatNone(nodes_in_level))
     - new_tree.extend(tree_a.take(nodes_in_level) or repeatNone(nodes_in_level))
     
+---
+
+moving names:
+
+      6           --> level 1: 1 nodes (0001), 6 below this level (0110)
+    /    \
+    5    4        --> level 2: 2 nodes (0010), 4 below this level (0100)
+   / \  / \
+   3 2  1 0       --> level 3: 4 nodes (0100), 0 below this level (0000)
+
+nodes_in_level = 2^(level-1)
+nodes_in_tree = (2^tree_levels) - 1
+below_this_level = nodes in this tree - nodes in tree of this level
+to extract level 1: lower index 6, higher index 6
+to extract level 2: lower_index 4, higher_index 5
+to extract level 3: lower_index 0, higher_index 3
+lower is "x" below this level
+higher is lower + nodes_in_level - 1
+
+3 levels example:
+
+      14          --> level 1: 1 nodes (0001), 14 below this level (1110)
+    /    \
+  13      12      --> level 2: 2 nodes (0010), 12 below this level (1100)
+ /  \    /   \
+11  10   9   8    --> level 3: 4 nodes (0100), 8 below this level (1000)
+/ \ / \ / \ / \
+7 6 5 4 3 2 1 0   --> level 4: 8 nodes (1000), 0 below this level (0000)
+
+
+nodes in this tree = 2^tree levels - 1
+    = 2^4 - 1
+    = 16 - 1
+    = 15
+to extract level 1:
+    nodes in this level =  2^(level - 1)
+        = 2^(1-1)
+        = 2^0
+        = 1
+    lower index = nodes below this level
+        = nodes in this tree - nodes in tree of this level
+        = 15 - (2^1 - 1)
+        = 15 - (2 - 1)
+        = 15 - 1
+        = 14
+    higher index: lower index + nodes in this level - 1
+        = 14 + 1 - 1
+        = 14
+
+to extract level 2:
+    nodes in this level = 2^(level - 1)
+        = 2^(2-1)
+        = 2^1
+        = 2
+    lower index = nodes in this tree - nodes in tree of this level
+        = 15 - (2^2 - 1)
+        = 15 - (4 - 1)
+        = 15 - 3
+        = 12
+    higher index = lower index + nodes in this level - 1
+        = 12 + 2 - 1
+        = 13
+
+to extract level 3:
+    nodes in this level = 2^(level - 1)
+        = 2^(3 - 1)
+        = 2^2
+        = 4
+    lower index = nodes in this tree - nodes in tree of this level
+        = 15 - (2^3 - 1)
+        = 15 - (8 - 1)
+        = 15 - 7
+        = 8
+    higher index = lower index + nodes in this level - 1
+        = 8 + 4 - 1
+        = 11
+
+to extract level 4:
+    nodes in this level = 2^(level - 1)
+        = 2^(4 - 1)
+        = 2^3
+        = 8
+    lower index = nodes in this tree - nodes in tree of this level
+        = 15 - (2^4 - 1)
+        = 15 - (16 - 1)
+        = 15 - 15
+        = 0
+    higher index = lower index + nodes in this level - 1
+        = 0 + 8 - 1
+        = 7
+

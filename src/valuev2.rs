@@ -168,6 +168,20 @@ impl Expr {
             .operation
     }
 
+    /// Sets the name of the expression, making sure
+    /// it is preserved in the tree operations.
+    ///
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    ///
+    /// let mut expr = Expr::new_leaf(1.0);
+    /// expr.set_name("x");
+    /// ```
+    pub fn set_name(&mut self, name: &str) {
+        self.names.insert(name.to_string(), self.tree.len() - 1);
+    }
+
     /// Applies the hyperbolic tangent function to the expression and returns it as a new expression.
     ///
     /// Example:
@@ -320,6 +334,25 @@ fn add_new_root(subtree_a: Expr, new_root: ExprNode) -> Expr {
     merge_trees(subtree_a, subtree_b, new_root)
 }
 
+fn reindex_names(names: &HashMap<String, usize>, new_names: &mut HashMap<String, usize>, tree_levels: u32, level_to_extract: u32, index_offset: usize) {
+    if level_to_extract > tree_levels {
+        return;
+    }
+
+    let nodes_in_tree = 2_usize.pow(tree_levels) - 1;
+    let nodes_in_tree_of_level_to_extract = 2_usize.pow(level_to_extract) - 1;
+    let nodes_in_this_level = 2_usize.pow(level_to_extract - 1);
+    let lower_index = nodes_in_tree - nodes_in_tree_of_level_to_extract;
+    let upper_index = lower_index + nodes_in_this_level - 1;
+
+    names.iter()
+        .filter(|&(_, index)| *index <= upper_index && *index >= lower_index)
+        .for_each(|(name, old_index)| {
+            let new_index = old_index - lower_index + index_offset;
+            new_names.insert(name.clone(), new_index);
+        });
+}
+
 fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
     let mut subtree_a = tree_a.tree;
     let mut subtree_b = tree_b.tree;
@@ -334,18 +367,15 @@ fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
 
     let final_level_number = levels_a.max(levels_b) + 1; // +1 for the new root
     let final_node_count = 2_usize.pow(final_level_number) - 1;
-    dbg!(levels_a, levels_b, final_level_number, final_node_count);
 
     let mut new_tree = Vec::with_capacity(final_node_count);
     let mut new_names = HashMap::new();
 
-    let mut original_tree_section_end_index = 0;
     let mut new_tree_section_start_index = 0;
+    // level 1 is skipped: it's the root and it's done after the loop
     for level_number in (2..=final_level_number).rev() {
         // simplifying 2^(l-1)/2 to 2^(l-2) creates a subtraction overflow for l=1
         let nodes_per_tree = 2_usize.pow(level_number - 1) / 2;
-        original_tree_section_end_index += nodes_per_tree;
-        dbg!(level_number, nodes_per_tree, original_tree_section_end_index);
 
         // extract nodes for this level for tree_b (right side)
         let mut nodes_b = if levels_b + 1 >= level_number {
@@ -355,12 +385,14 @@ fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
         };
         new_tree.append(&mut nodes_b);
 
-        tree_b.names.iter()
-            .filter(|(_, &index)| index < original_tree_section_end_index)
-            .for_each(|(name, old_index)| {
-                let new_index = old_index + new_tree_section_start_index;
-                new_names.insert(name.clone(), new_index);
-            });
+        reindex_names(
+            &tree_b.names,
+            &mut new_names, 
+            levels_b,
+            level_number - 1,
+            new_tree_section_start_index,
+        );
+        new_tree_section_start_index += nodes_per_tree;
 
         let mut nodes_a = if levels_a + 1 >= level_number {
             subtree_a.drain(..nodes_per_tree).collect()
@@ -369,14 +401,15 @@ fn merge_trees(tree_a: Expr, tree_b: Expr, new_root: ExprNode) -> Expr {
         };
         new_tree.append(&mut nodes_a);
 
-        tree_a.names.iter()
-            .filter(|(_, &index)| index < original_tree_section_end_index)
-            .map(|(name, old_index)| (name.clone(), old_index + new_tree_section_start_index + nodes_per_tree))
-            .for_each(|(name, new_index)| {
-                new_names.insert(name, new_index);
-            });
+        reindex_names(
+            &tree_a.names,
+            &mut new_names, 
+            levels_a,
+            level_number - 1,
+            new_tree_section_start_index
+        );
 
-        new_tree_section_start_index += nodes_per_tree * 2;
+        new_tree_section_start_index += nodes_per_tree;
     }
 
     new_tree.push(Some(new_root));
@@ -744,7 +777,6 @@ mod tests {
         };
 
         let merged_tree = add_new_root(tree_a, new_root);
-        dbg!(&merged_tree);
         assert_eq!(merged_tree.names.len(), 1);
         assert_eq!(merged_tree.names.get("x"), Some(&1));
     }
@@ -967,5 +999,213 @@ mod tests {
 
         let sum: Expr = vec![expr, expr2, expr3].into_iter().sum::<Expr>();
         assert_eq!(sum.result(), 6.0);
+    }
+
+    #[test]
+    fn sum_empty_iterator() {
+        let sum: Expr = Vec::<Expr>::new().into_iter().sum();
+        assert_eq!(sum.result(), 0.0);
+    }
+
+    #[test]
+    fn test_tree_storage() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.relu();
+        let expr3 = expr2 + 2.0;
+        let expr4 = expr3 * 3.0;
+
+        // tree is now:
+        //        9 (mul)
+        //      /         \
+        //     3 (add)    3 (leaf)
+        //    /       \
+        //   1 (relu) 2 (leaf)
+        //  /
+        // 1 (leaf)
+        // With missing terms:
+        //          9
+        //       /     \
+        //      3       3
+        //    /   \    /  \
+        //   1    2   n    n
+        //  / \  / \ / \  / \
+        // 1  n n  n n  n n n
+        // represented in array (right to left):
+        // [n, n, n, n, n, n, n, 1, n, n, 2, 1, 3, 3, 9]
+
+        assert_eq!(expr4.tree.len(), 15);
+        assert_eq!(expr4.tree.capacity(), 15);
+        assert_eq!(expr4.tree[0].is_none(), true);
+        assert_eq!(expr4.tree[1].is_none(), true);
+        assert_eq!(expr4.tree[2].is_none(), true);
+        assert_eq!(expr4.tree[3].is_none(), true);
+        assert_eq!(expr4.tree[4].is_none(), true);
+        assert_eq!(expr4.tree[5].is_none(), true);
+        assert_eq!(expr4.tree[6].is_none(), true);
+        assert_eq!(
+            expr4.tree[7].as_ref().unwrap().result,
+            1.0
+        );
+        assert_eq!(expr4.tree[8].is_none(), true);
+        assert_eq!(expr4.tree[9].is_none(), true);
+        assert_eq!(
+            expr4.tree[10].as_ref().unwrap().result,
+            2.0
+        );
+        assert_eq!(
+            expr4.tree[11].as_ref().unwrap().result,
+            1.0
+        );
+        assert_eq!(
+            expr4.tree[12].as_ref().unwrap().result,
+            3.0
+        );
+        assert_eq!(
+            expr4.tree[13].as_ref().unwrap().result,
+            3.0
+        );
+        assert_eq!(
+            expr4.tree[14].as_ref().unwrap().result,
+            9.0
+        );
+    }
+
+    #[test]
+    fn test_tree_storage_with_names() {
+        let expr = Expr::new_leaf_with_name(1.0, "a");
+        // Tree is now:
+        //        0 (leaf)
+        //        a (leaf)
+        assert_eq!(expr.names.len(), 1);
+        assert_eq!(expr.names.get("a"), Some(&0));
+
+        let mut expr2 = expr.relu();
+        expr2.set_name("b");
+        // Tree is now:
+        //        2
+        //        b (relu)
+        //      /       \
+        //     1         0
+        //     a         n
+
+        assert_eq!(expr2.names.len(), 2);
+        assert_eq!(expr2.names.get("a"), Some(&1));
+        assert_eq!(expr2.names.get("b"), Some(&2));
+
+        let mut expr3 = expr2 + 2.0;
+        expr3.set_name("c");
+
+        // Tree is now:
+        //        6
+        //        c (add)
+        //      /       \
+        //     5         4
+        //     b (relu)  n
+        //    /   \     / \
+        //   3     2   1   0
+        //   a     n   n   n
+        assert_eq!(expr3.names.len(), 3);
+        assert_eq!(expr3.names.get("a"), Some(&3));
+        assert_eq!(expr3.names.get("b"), Some(&5));
+        assert_eq!(expr3.names.get("c"), Some(&6));
+
+        let mut expr4 = expr3 * 3.0;
+        expr4.set_name("d");
+        // Tree is now:
+        //        14
+        //        d (mul)
+        //      /       \
+        //     13        12
+        //     c (add)   n
+        //    /   \     / \
+        //   11    10  9   8
+        //   b     n   n   n
+        //  / \   / \ / \ / \
+        // 7   6  5 4 3 2 1 0
+        // a   n  n n n n n n
+
+        assert_eq!(expr4.names.len(), 4);
+        assert_eq!(expr4.names.get("a"), Some(&7));
+        assert_eq!(expr4.names.get("b"), Some(&11));
+        assert_eq!(expr4.names.get("c"), Some(&13));
+        assert_eq!(expr4.names.get("d"), Some(&14));
+    }
+
+    #[test]
+    fn test_reindex_names() {
+        let mut names = HashMap::new();
+        names.insert("a".to_string(), 0);
+        // Tree is now:
+        //        0 (leaf)
+        //        a (leaf)
+
+        let mut names2 = HashMap::new();
+        // Tree will now be:
+        //        2
+        //        b (relu)
+        //      /       \
+        //     1         0
+        //     a         n
+        // moving left tree: (a)
+        reindex_names(&names, &mut names2, 1, 1, 1);
+
+        assert_eq!(names2.len(), 1);
+        assert_eq!(names2.get("a"), Some(&1));
+
+        // adding root (b)
+        names2.insert("b".to_string(), 2);
+
+        let mut names3 = HashMap::new();
+        // Tree will now be:
+        //        6
+        //        c (add)
+        //      /       \
+        //     5         4
+        //     b (relu)  n
+        //    /   \     / \
+        //   3     2   1   0
+        //   a     n   n   n
+
+        // moving left tree, level 2: (a)
+        reindex_names(&names2, &mut names3, 2, 2, 2);
+        assert_eq!(names3.len(), 1);
+        assert_eq!(names3.get("a"), Some(&3));
+
+        // moving left tree, level 1: (b)
+        reindex_names(&names2, &mut names3, 2, 1, 5);
+        assert_eq!(names3.len(), 2);
+        assert_eq!(names3.get("b"), Some(&5));
+
+        // adding root (c)
+        names3.insert("c".to_string(), 6);
+
+        let mut names4 = HashMap::new();
+        // Tree will now be:
+        //        14
+        //        d (mul)
+        //      /       \
+        //     13        12
+        //     c (add)   n
+        //    /   \     / \
+        //   11    10  9   8
+        //   b     n   n   n
+        //  / \   / \ / \ / \
+        // 7   6  5 4 3 2 1 0
+        // a   n  n n n n n n
+
+        // moving left tree, level 3 (a)
+        reindex_names(&names3, &mut names4, 3, 3, 4);
+        assert_eq!(names4.len(), 1);
+        assert_eq!(names4.get("a"), Some(&7));
+
+        // moving left tree, level 2 (b)
+        reindex_names(&names3, &mut names4, 3, 2, 10);
+        assert_eq!(names4.len(), 2);
+        assert_eq!(names4.get("b"), Some(&11));
+
+        // moving left tree, level 1 (c)
+        reindex_names(&names3, &mut names4, 3, 1, 13);
+        assert_eq!(names4.len(), 3);
+        assert_eq!(names4.get("c"), Some(&13));
     }
 }
