@@ -41,11 +41,11 @@ pub enum Operation {
 }
 
 impl Operation {
-    fn assert_is_type(&self, expr_type: ExprType) {
+    fn get_type(&self) -> ExprType {
         match self {
-            Operation::None => assert_eq!(expr_type, ExprType::Leaf),
-            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => assert_eq!(expr_type, ExprType::Unary),
-            _ => assert_eq!(expr_type, ExprType::Binary),
+            Operation::None => ExprType::Leaf,
+            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => ExprType::Unary,
+            Operation::Add | Operation::Sub | Operation::Mul | Operation::Div | Operation::Pow => ExprType::Binary,
         }
     }
 }
@@ -85,11 +85,18 @@ pub struct Expr {
     names: HashMap<String, usize>,
 }
 
+/// Expression node representing a single operation.
+/// 
+/// This struct represents a single operation in the expression tree.
 #[derive(Debug)]
-struct ExprNode {
+pub struct ExprNode {
+    /// The operation performed by this node.
     operation: Operation,
-    result: f64,
+    /// The result of the operation.
+    pub result: f64,
+    /// Indicates if this node is learnable.
     is_learnable: bool,
+    /// The gradient of the operation.
     grad: f64
 }
 
@@ -322,6 +329,141 @@ impl Expr {
             grad: 0.0
         };
         add_new_root(self, new_root)
+    }
+
+    /// Recalculates the value of the expression recursively, from new values of the operands.
+    /// 
+    /// Usually will be used after a call to [`Expr::learn`], where the gradients have been calculated and
+    /// the internal values of the expression tree have been updated.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0);
+    /// let mut expr2 = expr.tanh();
+    /// //expr2.learn(1e-09);
+    /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result(), 0.7615941559557649);
+    /// //assert_eq!(expr2.result(), 0.7615941557793864);
+    /// ```
+    /// 
+    /// You can also vary the values of the operands and recalculate the expression:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    /// 
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let mut expr2 = expr.tanh();
+    /// 
+    /// let mut original = expr2.find_mut("x").expect("Could not find x");
+    /// original.result = 2.0;
+    /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result(), 0.9640275800758169);
+    /// ```
+    pub fn recalculate(&mut self) {
+        let len = self.tree.len();
+        for i in 0..len {
+            // if these do not have operands, they are leaves
+            // its safe to skip them
+            // lower value: 2 * i - len - 1
+            // so we need to check if 2 * i - len - 1 <= 0
+            // so 2 * i <= len + 1 (to avoid underflow)
+            if 2 * i < len + 1 {
+                continue;
+            }
+
+            // if this node is None, it means it's a placeholder
+            // for other shallower parts of the tree
+            if self.tree[i].is_none() {
+                continue;
+            }
+
+            let left_operand_index = 2 * i - len;
+            let right_operand_index = left_operand_index - 1;
+
+            let Ok([node, operand1, operand2]) = self.tree.get_disjoint_mut([i, left_operand_index, right_operand_index]) else {
+                panic!("Could not get disjoint mutable references from the tree");
+            };
+            let node = node.as_mut().expect("node cannot be None");
+
+            node.result = match node.operation.get_type() {
+                ExprType::Leaf => {
+                    match node.operation {
+                        Operation::None => node.result,
+                        _ => panic!("Invalid operation for leaf node"),
+                    }
+                },
+                ExprType::Unary => {
+                    let operand1 = operand1.as_ref().expect("operand1 cannot be None");
+                    match node.operation {
+                        Operation::Tanh => operand1.result.tanh(),
+                        Operation::Exp => operand1.result.exp(),
+                        Operation::ReLU => operand1.result.max(0.0),
+                        Operation::Log => operand1.result.ln(),
+                        Operation::Neg => -operand1.result,
+                        _ => panic!("Invalid operation for unary node"),
+                    }
+                },
+                ExprType::Binary => {
+                    let operand1 = operand1.as_ref().expect("operand1 cannot be None");
+                    let operand2 = operand2.as_ref().expect("operand2 cannot be None");
+                    match node.operation {
+                        Operation::Add => operand1.result + operand2.result,
+                        Operation::Sub => operand1.result - operand2.result,
+                        Operation::Mul => operand1.result * operand2.result,
+                        Operation::Div => operand1.result / operand2.result,
+                        Operation::Pow => operand1.result.powf(operand2.result),
+                        _ => panic!("Invalid operation for binary node"),
+                    }
+                }
+            };
+        }
+    }
+
+    /// Finds a node in the expression tree by its name.
+    /// 
+    /// This method will search the expression tree for a node with the given name.
+    /// If the node is not found, it will return [None].
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::valuev2::Expr;
+    /// 
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let expr2 = expr.tanh();
+    /// let original = expr2.find("x");
+    /// 
+    /// assert_eq!(original.expect("Could not find x").result, 1.0);
+    /// ```
+    pub fn find(&self, name: &str) -> Option<&ExprNode> {
+        self.names.get(name)
+            .and_then(|&index| self.tree.get(index))
+            .and_then(|node| node.as_ref())
+    }
+
+    /// Finds a node in the expression tree by its name and returns a mutable reference to it.
+    /// 
+    /// This method will search the expression tree for a node with the given name.
+    /// If the node is not found, it will return [None].
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let mut expr2 = expr.tanh();
+    /// let mut original = expr2.find_mut("x").expect("Could not find x");
+    /// original.result = 2.0;
+    /// expr2.recalculate();
+    /// 
+    /// assert_eq!(expr2.result, 0.9640275800758169);
+    /// ```
+    pub fn find_mut(&mut self, name: &str) -> Option<&mut ExprNode> {
+        self.names.get(name)
+            .and_then(|&index| self.tree.get_mut(index))
+            .and_then(|node| node.as_mut())
     }
 }
 
@@ -1207,5 +1349,36 @@ mod tests {
         reindex_names(&names3, &mut names4, 3, 1, 13);
         assert_eq!(names4.len(), 3);
         assert_eq!(names4.get("c"), Some(&13));
+    }
+
+    #[test]
+    fn test_find_simple() {
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
+
+        let found = expr2.find("x");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().result, 1.0);
+    }
+
+    #[test]
+    fn test_find_not_found() {
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
+
+        let found = expr2.find("y");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_recalculate() {
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let mut expr2 = expr.tanh();
+
+        let original = expr2.find_mut("x").expect("Could not find x");
+        original.result = 2.0;
+        expr2.recalculate();
+
+        assert_eq!(expr2.result(), 0.9640275800758169);
     }
 }

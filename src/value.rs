@@ -1428,5 +1428,5 @@ mod tests {
         let found = expr2_clone.find("x");
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, Some("x".to_string()));
-    }    
+    }
 }

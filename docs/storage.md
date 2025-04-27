@@ -559,3 +559,75 @@ to extract level 4:
         = 0 + 8 - 1
         = 7
 
+---
+
+child indexing:
+
+> Perfect binary trees can be represented using an array, where the left child of a node at index i is stored at index 2i+1 and the right child is stored at index 2i+2. This makes it easy to access the children of a node and to traverse the tree.
+
+If we store it right-to-left, then indexes are inverted:
+
+for a length of 2:
+0 1
+1 0
+
+Replacing i with (len-1-i):
+
+node is at (len-1-i)
+left child is at: len-1-(2(len-1-i)+1)
+    = len-1-(2len-2-2i+1)
+    = len-1-(2len-1-2i)
+    = len-1-2len+1+2i
+    = -len+2i
+    = 2i-len
+
+right child is at: len-1-(2(len-1-i)+2)
+    = len-1-(2len-2-2i+2)
+    = len-1-2len+2+2i-2
+    = -len-1+2i
+    = 2i-len+1
+
+which implies that the right child would be at the right of the left, when inversely stored that's not true (it's the other way around). Maybe we just need to use left for right and viceversa.
+
+3 levels example:
+
+      14
+    /    \
+  13      12
+ /  \    /   \
+11  10   9   8
+/ \ / \ / \ / \
+7 6 5 4 3 2 1 0
+
+len: 15
+left child of 14:
+    2i-len
+    = 2*14-15
+    = 28-15
+    = 13
+
+right child of 14:
+    2i-len+1
+    = ...13 + 1 --> should be -1 instead of +1
+    = 14
+
+left child of 9:
+    = 2*9-15
+    = 18-15
+    = 3
+
+right child of 9:
+    = left + 1 --> should be -1 instead of +1
+    = 4
+
+fixed formulas:
+- left child: 2i-len
+- right child: 2i-len-1 (or left-1)
+
+left child of 12:
+    = 2i-len
+    = 12*2-15
+    = 24-15
+    = 9
+
+right child: 8
