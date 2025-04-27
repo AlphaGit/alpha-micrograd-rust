@@ -342,11 +342,10 @@ impl Expr {
     /// 
     /// let expr = Expr::new_leaf(1.0);
     /// let mut expr2 = expr.tanh();
-    /// //expr2.learn(1e-09);
+    /// expr2.learn(1e-09);
     /// expr2.recalculate();
     /// 
-    /// assert_eq!(expr2.result(), 0.7615941559557649);
-    /// //assert_eq!(expr2.result(), 0.7615941557793864);
+    /// assert_eq!(expr2.result(), 0.7615941557793864);
     /// ```
     /// 
     /// You can also vary the values of the operands and recalculate the expression:
@@ -364,16 +363,12 @@ impl Expr {
     /// ```
     pub fn recalculate(&mut self) {
         let len = self.tree.len();
-        for i in 0..len {
-            // if these do not have operands, they are leaves
-            // its safe to skip them
-            // lower value: 2 * i - len - 1
-            // so we need to check if 2 * i - len - 1 <= 0
-            // so 2 * i <= len + 1 (to avoid underflow)
-            if 2 * i < len + 1 {
-                continue;
-            }
 
+        // we skip the last layer of the tree
+        // because it means they have no operands
+        // meaning that they are leaves
+        let lower_bound = (len + 1) / 2;
+        for i in lower_bound..len {
             // if this node is None, it means it's a placeholder
             // for other shallower parts of the tree
             if self.tree[i].is_none() {
@@ -419,6 +414,138 @@ impl Expr {
                     }
                 }
             };
+        }
+    }
+
+    /// Applies backpropagation to the expression, updating the values of the
+    /// gradients and the expression itself.
+    /// 
+    /// This method will change the gradients based on the gradient of the last
+    /// expression in the calculation graph.
+    /// 
+    /// Example:
+    /// 
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0);
+    /// let mut expr2 = expr.tanh();
+    /// expr2.learn(1e-09);
+    /// ```
+    /// 
+    /// After adjusting the gradients, the method will update the values of the
+    /// individual expression tree nodes to minimize the loss function.
+    /// 
+    /// In order to get a new calculation of the expression tree, you'll need to call
+    /// [`Expr::recalculate`] after calling [`Expr::learn`].
+    pub fn learn(&mut self, learning_rate: f64) {
+        let len = self.tree.len();
+        self.tree[len - 1]
+            .as_mut()
+            .expect("root cannot be empty")
+            .grad = 1.0;
+
+        // we skip the last layer of the tree
+        // because it means they have no operands
+        // meaning that they are leaves
+        let lower_bound = (len + 1) / 2;
+        for i in lower_bound..len {
+            // if this node is None, it means it's a placeholder
+            // for other shallower parts of the tree
+            if self.tree[i].is_none() {
+                continue;
+            }
+
+            let left_operand_index = 2 * i - len;
+            let right_operand_index = left_operand_index - 1;
+
+            let Ok([node, operand1, operand2]) = self.tree.get_disjoint_mut([i, left_operand_index, right_operand_index]) else {
+                panic!("Could not get disjoint mutable references from the tree");
+            };
+            let node = node.as_mut().expect("node cannot be None");
+
+            match node.operation.get_type() {
+                ExprType::Leaf => {
+                    match node.operation {
+                        Operation::None => {
+                            if node.is_learnable {
+                                node.result -= learning_rate * node.grad;
+                            }
+                        },
+                        _ => panic!("Invalid operation for leaf node"),
+                    }
+                },
+                ExprType::Unary => {
+                    let operand1 = operand1.as_mut().expect("operand1 cannot be None");
+                    match node.operation {
+                        Operation::Tanh => {
+                            let tanh_grad = 1.0 - node.result.powi(2);
+                            operand1.grad = tanh_grad * node.grad;
+                        },
+                        Operation::Exp => {
+                            operand1.grad = node.result * node.grad;
+                        },
+                        Operation::ReLU => {
+                            operand1.grad = (if node.result > 0.0 { 1.0 } else { 0.0 }) * node.grad;
+                        },
+                        Operation::Log => {
+                            operand1.grad = node.grad / node.result;
+                        },
+                        Operation::Neg => {
+                            operand1.grad = -node.grad;
+                        },
+                        _ => panic!("Invalid operation for unary node"),
+                    }
+                },
+                ExprType::Binary => {
+                    let operand1 = operand1.as_mut().expect("operand1 cannot be None");
+                    let operand2 = operand2.as_mut().expect("operand2 cannot be None");
+                    match node.operation {
+                        Operation::Add => {
+                            operand1.grad = node.grad;
+                            operand2.grad = node.grad;
+                        },
+                        Operation::Sub => {
+                            operand1.grad = node.grad;
+                            operand2.grad = -node.grad;
+                        },
+                        Operation::Mul => {
+                            operand1.grad = node.grad * operand2.result;
+                            operand2.grad = node.grad * operand1.result;
+                        },
+                        Operation::Div => {
+                            operand1.grad = node.grad / operand2.result;
+                            operand2.grad = -node.grad * operand1.result / operand2.result.powi(2);
+                        },
+                        Operation::Pow => {
+                            let exponent = operand2.result;
+                            let base = operand1.result;
+
+                            operand1.grad = node.grad * exponent * base.powf(exponent - 1.0);
+                            operand2.grad = node.grad * base.powf(exponent) * base.ln();
+                        },
+                        _ => panic!("Invalid operation for binary node"),
+                    }
+                },
+            }
+        }
+
+        // now one last iteration towards the last layer
+        // so we can update the leaves
+        for i in 0..lower_bound {
+            // if this node is None, it means it's a placeholder
+            // for other shallower parts of the tree
+            if self.tree[i].is_none() {
+                continue;
+            }
+
+            let node = self.tree[i].as_mut().expect("node cannot be None");
+            assert!(node.operation.get_type() == ExprType::Leaf, "node should be a leaf node");
+            assert!(node.operation == Operation::None, "node should be a leaf node");
+
+            if node.is_learnable {
+                node.result -= learning_rate * node.grad;
+            }
         }
     }
 
