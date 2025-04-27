@@ -100,7 +100,45 @@ pub struct ExprNode {
     grad: f64
 }
 
+impl ExprNode {
+    fn from_parameter(value: f64) -> Self {
+        ExprNode {
+            operation: Operation::None,
+            result: value,
+            is_learnable: true,
+            grad: 0.0
+        }
+    }
+
+    fn from_constant(value: f64) -> Self {
+        ExprNode {
+            operation: Operation::None,
+            result: value,
+            is_learnable: false,
+            grad: 0.0
+        }
+    }
+
+    fn from_operation(operation: Operation, result: f64) -> Self {
+        ExprNode {
+            operation,
+            result,
+            is_learnable: false,
+            grad: 0.0
+        }
+    }
+}
+
 impl Expr {
+    fn from_node(node: ExprNode) -> Self {
+        let mut tree = Vec::with_capacity(1);
+        tree.push(Some(node));
+        Expr {
+            tree,
+            names: HashMap::new(),
+        }
+    }
+
     /// Creates a new leaf expression with the given value.
     /// 
     /// Example:
@@ -110,17 +148,8 @@ impl Expr {
     /// let expr = Expr::new_leaf(1.0);
     /// ```
     pub fn new_leaf(value: f64) -> Expr {
-        let mut tree = Vec::with_capacity(1);
-        tree.push(Some(ExprNode {
-            operation: Operation::None,
-            result: value,
-            is_learnable: true,
-            grad: 0.0
-        }));
-        Expr {
-            tree,
-            names: HashMap::new(),
-        }
+        let node = ExprNode::from_parameter(value);
+        Expr::from_node(node)
     }
 
     /// Creates a new leaf expression with the given value and name.
@@ -592,6 +621,38 @@ impl Expr {
             .and_then(|&index| self.tree.get_mut(index))
             .and_then(|node| node.as_mut())
     }
+
+    /// Returns the count of nodes (parameters)in the expression tree.
+    /// 
+    /// This method will return the total number of nodes in the expression tree,
+    /// including the root node.
+    /// 
+    /// Example:
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// 
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.tanh();
+    /// 
+    /// assert_eq!(expr2.parameter_count(false), 2);
+    /// assert_eq!(expr2.parameter_count(true), 1);
+    /// ```
+    pub fn parameter_count(&self, learnable_only: bool) -> usize {
+        self.tree.iter().filter(|node| {
+            if let Some(node) = node {
+                if learnable_only {
+                    println!("Found node: {:?} (learneable)", node);
+                    node.is_learnable
+                } else {
+                    println!("Found node: {:?} (non-learneable)", node);
+                    true
+                }
+            } else {
+                println!("Found node: None");
+                false
+            }
+        }).count()
+    }
 }
 
 fn add_new_root(subtree_a: Expr, new_root: ExprNode) -> Expr {
@@ -712,12 +773,7 @@ impl Add for Expr {
 
     fn add(self, other: Expr) -> Expr {
         let result = self.result() + other.result();
-        let new_root = ExprNode {
-            operation: Operation::Add,
-            result,
-            is_learnable: true,
-            grad: 0.0
-        };
+        let new_root = ExprNode::from_operation(Operation::Add, result);
         merge_trees(self, other, new_root)
     }
 }
@@ -739,8 +795,9 @@ impl Add<f64> for Expr {
     type Output = Expr;
 
     fn add(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other);
-        self + operand2
+        let operand2 = ExprNode::from_constant(other);
+        let other_tree = Expr::from_node(operand2);
+        self + other_tree
     }
 }
 
@@ -761,8 +818,9 @@ impl Add<Expr> for f64 {
     type Output = Expr;
 
     fn add(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self);
-        operand1 + other
+        let operand1 = ExprNode::from_constant(self);
+        let other_tree = Expr::from_node(operand1);
+        other_tree + other
     }
 }
 
@@ -787,12 +845,7 @@ impl Mul for Expr {
 
     fn mul(self, other: Expr) -> Expr {
         let result = self.result() * other.result();
-        let new_root = ExprNode {
-            operation: Operation::Mul,
-            result,
-            is_learnable: true,
-            grad: 0.0
-        };
+        let new_root = ExprNode::from_operation(Operation::Mul, result);
         merge_trees(self, other, new_root)
     }
 }
@@ -815,8 +868,9 @@ impl Mul<f64> for Expr {
     type Output = Expr;
 
     fn mul(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other);
-        self * operand2
+        let operand2 = ExprNode::from_constant(other);
+        let other_tree = Expr::from_node(operand2);
+        self * other_tree
     }
 }
 
@@ -838,8 +892,9 @@ impl Mul<Expr> for f64 {
     type Output = Expr;
 
     fn mul(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self);
-        operand1 * other
+        let operand1 = ExprNode::from_constant(self);
+        let other_tree = Expr::from_node(operand1);
+        other_tree * other
     }
 }
 
@@ -864,12 +919,7 @@ impl Sub for Expr {
 
     fn sub(self, other: Expr) -> Expr {
         let result = self.result() - other.result();
-        let new_root = ExprNode {
-            operation: Operation::Sub,
-            result,
-            is_learnable: true,
-            grad: 0.0
-        };
+        let new_root = ExprNode::from_operation(Operation::Sub, result);
         merge_trees(self, other, new_root)
     }
 }
@@ -892,8 +942,9 @@ impl Sub<f64> for Expr {
     type Output = Expr;
 
     fn sub(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other);
-        self - operand2
+        let operand2 = ExprNode::from_constant(other);
+        let other_tree = Expr::from_node(operand2);
+        self - other_tree
     }
 }
 
@@ -915,8 +966,9 @@ impl Sub<Expr> for f64 {
     type Output = Expr;
 
     fn sub(self, other: Expr) -> Expr {
-        let operand1 = Expr::new_leaf(self);
-        operand1 - other
+        let operand1 = ExprNode::from_constant(self);
+        let other_tree = Expr::from_node(operand1);
+        other_tree - other
     }
 }
 
@@ -941,12 +993,7 @@ impl Div for Expr {
 
     fn div(self, other: Expr) -> Expr {
         let result = self.result() / other.result();
-        let new_root = ExprNode {
-            operation: Operation::Div,
-            result,
-            is_learnable: true,
-            grad: 0.0
-        };
+        let new_root = ExprNode::from_operation(Operation::Div, result);
         merge_trees(self, other, new_root)
     }
 }
@@ -969,8 +1016,9 @@ impl Div<f64> for Expr {
     type Output = Expr;
 
     fn div(self, other: f64) -> Expr {
-        let operand2 = Expr::new_leaf(other);
-        self / operand2
+        let operand2 = ExprNode::from_constant(other);
+        let other_tree = Expr::from_node(operand2);
+        self / other_tree
     }
 }
 
@@ -1000,7 +1048,7 @@ impl Sum for Expr {
         I: Iterator<Item = Self>,
     {
         iter.reduce(|acc, x| acc + x)
-            .unwrap_or(Expr::new_leaf(0.0))
+            .unwrap_or(Expr::from_node(ExprNode::from_constant(0.0)))
     }
 }
 
@@ -1507,5 +1555,16 @@ mod tests {
         expr2.recalculate();
 
         assert_eq!(expr2.result(), 0.9640275800758169);
+    }
+
+    #[test]
+    fn test_parameter_count() {
+        let expr = Expr::new_leaf_with_name(1.0, "x");
+        let expr2 = expr.tanh();
+        let expr3 = expr2 + 2.0;
+        let expr4 = expr3 * 3.0;
+
+        assert_eq!(expr4.parameter_count(false), 6);
+        assert_eq!(expr4.parameter_count(true), 1);
     }
 }
