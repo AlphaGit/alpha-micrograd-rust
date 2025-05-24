@@ -14,21 +14,22 @@ use alpha_micrograd_rust::value::Expr;
 
 fn main() {
     // these are the initial values for the nodes of the graph
-    let mut x1 = Expr::new_leaf(2.0);
+    let mut x1 = Expr::new_leaf_with_name(2.0, "x1");
     x1.is_learnable = false;
 
-    let mut x2 = Expr::new_leaf(1.0);
+    let mut x2 = Expr::new_leaf_with_name(1.0, "x2");
     x2.is_learnable = false;
 
-    let w1 = Expr::new_leaf(-3.0);
-    let w2 = Expr::new_leaf(1.0);
-    let b = Expr::new_leaf(6.5);
+    let w1 = Expr::new_leaf_with_name(-3.0, "w1");
+    let w2 = Expr::new_leaf_with_name(1.0, "w2");
+    let b = Expr::new_leaf_with_name(6.5, "b");
 
     // here we compute the expression x1*w1 + x2*w2 + b
     let x1w1 = x1 * w1;
     let x2w2 = x2 * w2;
     let x1w1_x2w2 = x1w1 + x2w2;
-    let n = x1w1_x2w2 + b;
+    let mut n = x1w1_x2w2 + b;
+    n.name = Some("n".to_string());
 
     // we add a non-linear activation function: tanh(x1*w1 + x2*w2 + b)
     let mut o = n.tanh();
@@ -53,15 +54,15 @@ fn main() {
     println!("Initial loss: {:.4}", loss.result);
 
     println!("\nTraining:");
-    let learning_rate = 0.01;
-    for i in 1..=50 {
+    let learning_rate = 1e-3;
+    for i in 1..=800 {
         loss.learn(learning_rate);
         loss.recalculate();
 
         let target = loss.find("o").expect("Node not found");
 
         println!(
-            "Iteration {:2}, loss: {:.4} / result: {:.2}",
+            "Iteration {:3}, loss: {:.4} / result: {:.2}",
             i, loss.result, target.result
         );
     }
@@ -79,7 +80,7 @@ fn main() {
     let x2 = loss.find("x2").expect("Node not found");
 
     let n = loss
-        .find("(((x1 * w1) + (x2 * w2)) + b)") // auto-generated node name
+        .find("n")
         .expect("Node not found");
     let o = loss.find("o").expect("Node not found");
 
