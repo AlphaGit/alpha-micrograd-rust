@@ -3,4 +3,6 @@
 /target/criterion/*/new/
 /target/criterion/*/report/
 
+*.svg
+
 .DS_Store
