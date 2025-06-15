@@ -52,6 +52,40 @@ impl CompiledExpr {
 
         tape
     }
+
+    pub fn recalculate(&mut self) {
+        for i in 0..self.results.len() {
+            let operation = self.operations[i];
+            let lhs_index = self.lhs[i];
+            let rhs_index = self.rhs[i];
+
+            let lhs_value = if let Some(index) = lhs_index {
+                self.results[index]
+            } else {
+                0.0 // Default value for leaf nodes
+            };
+
+            let rhs_value = if let Some(index) = rhs_index {
+                self.results[index]
+            } else {
+                0.0 // Default value for leaf nodes
+            };
+
+            self.results[i] = match operation {
+                Operation::Add => lhs_value + rhs_value,
+                Operation::Sub => lhs_value - rhs_value,
+                Operation::Mul => lhs_value * rhs_value,
+                Operation::Div => lhs_value / rhs_value,
+                Operation::None => self.results[i], // No operation, keep the value
+                Operation::Tanh => lhs_value.tanh(),
+                Operation::Exp => lhs_value.exp(),
+                Operation::Pow => lhs_value.powf(rhs_value),
+                Operation::Log => lhs_value.ln(),
+                Operation::ReLU => lhs_value.max(0.0),
+                Operation::Neg => -lhs_value,
+            };
+        }
+    }
 }
 
 #[cfg(test)]
@@ -144,5 +178,29 @@ mod tests {
         assert_eq!(tape.names_to_index.get("d"), Some(&4));
         assert!(tape.names_to_index.get("a").is_none());
         assert!(tape.names_to_index.get("c").is_none());
+    }
+
+    #[test]
+    fn test_recalculate() {
+        // Create a simple expression: a + b
+        let a = Expr::new_leaf(2.0);
+        let b = Expr::new_leaf(3.0);
+        let expr = a + b;
+
+        // Convert to tape
+        let mut tape = CompiledExpr::from_expr(expr);
+
+        // Recalculate the results
+        tape.recalculate();
+
+        // Verify the result
+        assert_eq!(tape.results[2], 5.0); // Result of a + b
+
+        tape.results[0] = 4.0; // Change a to 4.0
+        tape.results[1] = 6.0; // Change b to 6.0
+        tape.recalculate();
+
+        // Verify the recalculated result
+        assert_eq!(tape.results[2], 10.0); // Result of 4.0 + 6.0
     }
 }

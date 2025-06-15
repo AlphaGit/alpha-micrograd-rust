@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Operation {
     None,
     Add,
