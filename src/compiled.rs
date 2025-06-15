@@ -8,6 +8,7 @@ struct CompiledExpr {
     rhs: Vec<Option<usize>>,
     results: Vec<f64>,
     gradients: Vec<f64>,
+    is_learnable: Vec<bool>,
     names_to_index: HashMap<String, usize>,
 }
 
@@ -32,6 +33,7 @@ impl CompiledExpr {
         self.results.push(expr.result);
         self.operations.push(expr.operation);
         self.gradients.push(expr.grad);
+        self.is_learnable.push(expr.is_learnable);
         if let Some(name) = expr.name {
             self.names_to_index.insert(name, self.results.len() - 1);
         }
@@ -45,6 +47,7 @@ impl CompiledExpr {
             rhs: Vec::with_capacity(parameter_count),
             results: Vec::with_capacity(parameter_count),
             gradients: Vec::with_capacity(parameter_count),
+            is_learnable: Vec::with_capacity(parameter_count),
             names_to_index: HashMap::new(),
         };
 
@@ -86,11 +89,113 @@ impl CompiledExpr {
             };
         }
     }
+
+    pub fn learn(&mut self, learning_rate: f64) {
+        // set last gradient to 1.0
+        self.gradients[self.results.len() - 1] = 1.0;
+
+        for i in (0..self.results.len()).rev() {
+            let operation = self.operations[i];
+            let lhs_index = self.lhs[i].unwrap_or(0);
+            let rhs_index = self.rhs[i].unwrap_or(0);
+
+            let lhs_result = if let Some(index) = self.lhs[i] {
+                self.results[index]
+            } else {
+                0.0 // Default value for leaf nodes
+            };
+
+            let rhs_result = if let Some(index) = self.rhs[i] {
+                self.results[index]
+            } else {
+                0.0 // Default value for leaf nodes
+            };
+            let result = self.results[i];
+            let gradient = self.gradients[i];
+
+            match operation {
+                // Learnable leaves
+                Operation::None => {
+                    // For learnable leaves only, update the result directly
+                    // (the gradient is already set by a previous operation)
+                    if self.is_learnable[i] {
+                        self.results[i] -= learning_rate * self.gradients[i];
+                    }
+                }
+                // Unary operations
+                Operation::Tanh => {
+                    let tanh_grad = 1.0 - (result * result);
+                    self.gradients[lhs_index] = gradient * tanh_grad;
+                }
+                Operation::Exp => {
+                    self.gradients[lhs_index] = gradient * result;
+                }
+                Operation::ReLU => {
+                    self.gradients[lhs_index] = if result > 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                }
+                Operation::Log => {
+                    self.gradients[lhs_index] = gradient / result;
+                }
+                Operation::Neg => {
+                    self.gradients[lhs_index] = -gradient;
+                }
+                // Binary operations
+                Operation::Add => {
+                    self.gradients[lhs_index] = gradient;
+                    self.gradients[rhs_index] = gradient;
+                }
+                Operation::Sub => {
+                    self.gradients[lhs_index] = gradient;
+                    self.gradients[rhs_index] = -gradient;
+                }
+                Operation::Mul => {
+                    self.gradients[lhs_index] = gradient * rhs_result;
+                    self.gradients[rhs_index] = gradient * lhs_result;
+                }
+                Operation::Div => {
+                    self.gradients[lhs_index] = gradient / rhs_result;
+                    self.gradients[rhs_index] = -gradient * lhs_result / (rhs_result * rhs_result);
+                }
+                Operation::Pow => {
+                    let exponent = rhs_result;
+                    let base = lhs_result;
+
+                    self.gradients[lhs_index] = gradient * exponent * base.powf(exponent - 1.0);
+                    self.gradients[rhs_index] = gradient * lhs_result.ln() * result;
+                }
+            }
+        }
+    }
+
+    pub fn result(&self) -> f64 {
+        if self.results.is_empty() {
+            0.0
+        } else {
+            *self.results.last().unwrap()
+        }
+    }
+
+    pub fn get_grad_by_name(&self, name: &str) -> Option<f64> {
+        if let Some(&index) = self.names_to_index.get(name) {
+            return Some(self.gradients[index]);
+        }
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_float_eq(f1: f64, f2: f64) {
+        let places = 7;
+        let tolerance = 10.0_f64.powi(-places);
+        assert!((f1 - f2).abs() < tolerance, "{} != {} (tol: {})", f1, f2, tolerance);
+    }
 
     #[test]
     fn test_from_expr_multilevel() {
@@ -202,5 +307,244 @@ mod tests {
 
         // Verify the recalculated result
         assert_eq!(tape.results[2], 10.0); // Result of 4.0 + 6.0
+    }
+
+    #[test]
+    fn test_learn_simple() {
+        let expr = Expr::new_leaf(1.0);
+        let mut tape = CompiledExpr::from_expr(expr);
+        assert_eq!(tape.result(), 1.0);
+
+        tape.learn(1e-01);
+        assert_eq!(tape.result(), 0.9); // 1.0 - 0.1 = 0.9
+    }
+
+    #[test]
+    fn test_learn_skips_non_learnable() {
+        let mut expr = Expr::new_leaf(1.0);
+        expr.is_learnable = false;
+        let mut tape = CompiledExpr::from_expr(expr);
+        assert_eq!(tape.result(), 1.0);
+
+        tape.learn(1e-01);
+        assert_eq!(tape.result(), 1.0);
+    }
+
+    #[test]
+    fn test_learn_multilevel() {
+        let expr = Expr::new_leaf(1.0);
+        let expr2 = expr.tanh();
+        let mut tape = CompiledExpr::from_expr(expr2);
+        assert_eq!(tape.result(), 0.7615941559557649); // tanh(1.0)
+        tape.learn(1e-09);
+        tape.recalculate();
+
+        assert_eq!(tape.result(), 0.7615941557793864);
+    }
+
+    #[test]
+    fn test_backpropagation_add() {
+        let mut operand1 = Expr::new_leaf(1.0);
+        operand1.name = Some("a".to_string());
+
+        let mut operand2 = Expr::new_leaf(2.0);
+        operand2.name = Some("b".to_string());
+
+        let expr3 = operand1 + operand2;
+        let mut tape = CompiledExpr::from_expr(expr3);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        let grad_b = tape.get_grad_by_name("b").unwrap();
+        assert_eq!(grad_a, 1.0);
+        assert_eq!(grad_b, 1.0);
+    }
+
+    #[test]
+    fn test_backpropagation_sub() {
+        let mut operand1 = Expr::new_leaf(1.0);
+        operand1.name = Some("a".to_string());
+
+        let mut operand2 = Expr::new_leaf(2.0);
+        operand2.name = Some("b".to_string());
+
+        let expr3 = operand1 - operand2;
+        let mut tape = CompiledExpr::from_expr(expr3);
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        let grad_b = tape.get_grad_by_name("b").unwrap();
+        assert_eq!(grad_a, 1.0);
+        assert_eq!(grad_b, -1.0);
+    }
+
+    #[test]
+    fn test_backpropagation_mul() {
+        let mut operand1 = Expr::new_leaf(3.0);
+        operand1.name = Some("a".to_string());
+
+        let mut operand2 = Expr::new_leaf(4.0);
+        operand2.name = Some("b".to_string());
+
+        let expr3 = operand1 * operand2;
+        let mut tape = CompiledExpr::from_expr(expr3);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        let grad_b = tape.get_grad_by_name("b").unwrap();
+        assert_eq!(grad_a, 4.0);
+        assert_eq!(grad_b, 3.0);
+    }
+
+    #[test]
+    fn test_backpropagation_div() {
+        let mut operand1 = Expr::new_leaf(3.0);
+        operand1.name = Some("a".to_string());
+
+        let mut operand2 = Expr::new_leaf(4.0);
+        operand2.name = Some("b".to_string());
+        let expr3 = operand1 / operand2;
+        let mut tape = CompiledExpr::from_expr(expr3);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        let grad_b = tape.get_grad_by_name("b").unwrap();
+        assert_eq!(grad_a, 0.25);
+        assert_eq!(grad_b, -0.1875);
+    }
+
+    #[test]
+    fn test_backpropagation_tanh() {
+        let mut operand1 = Expr::new_leaf(0.0);
+        operand1.name = Some("a".to_string());
+        let expr2 = operand1.tanh();
+        let mut tape = CompiledExpr::from_expr(expr2);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        assert_float_eq(grad_a, 1.0);
+    }
+
+    #[test]
+    fn test_backpropagation_relu() {
+        let mut operand1 = Expr::new_leaf(-1.0);
+        operand1.name = Some("a".to_string());
+        let expr2 = operand1.relu();
+        let mut tape = CompiledExpr::from_expr(expr2);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        assert_eq!(grad_a, 0.0);
+    }
+
+    #[test]
+    fn test_backpropagation_exp() {
+        let mut operand1 = Expr::new_leaf(0.0);
+        operand1.name = Some("a".to_string());
+        let expr2 = operand1.exp();
+        let mut tape = CompiledExpr::from_expr(expr2);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        assert_eq!(grad_a, 1.0);
+    }
+
+    #[test]
+    fn test_backpropagation_pow() {
+        let mut operand1 = Expr::new_leaf(2.0);
+        operand1.name = Some("a".to_string());
+        let mut operand2 = Expr::new_leaf(3.0);
+        operand2.name = Some("b".to_string());
+        let expr3 = operand1.pow(operand2);
+        let mut tape = CompiledExpr::from_expr(expr3);
+
+        tape.learn(1e-09);
+
+        let grad_a = tape.get_grad_by_name("a").unwrap();
+        let grad_b = tape.get_grad_by_name("b").unwrap();
+        assert_eq!(grad_a, 12.0);
+        assert_eq!(grad_b, 5.545177444479562);
+    }
+
+    #[test]
+    fn test_backpropagation_mixed_tree() {
+        let mut operand1 = Expr::new_leaf(1.0);
+        operand1.name = Some("operand1".to_string());
+        let mut operand2 = Expr::new_leaf(2.0);
+        operand2.name = Some("operand2".to_string());
+        let mut expr3 = operand1 + operand2;
+        expr3.name = Some("expr3".to_string());
+        let expr4 = expr3.tanh();
+        let mut tape = CompiledExpr::from_expr(expr4);
+
+        tape.learn(1e-09);
+
+        let expr3_grad = tape.get_grad_by_name("expr3").unwrap();
+        let operand1_grad = tape.get_grad_by_name("operand1").unwrap();
+        let operand2_grad = tape.get_grad_by_name("operand2").unwrap();
+
+        assert_eq!(expr3_grad, 0.009866037165440211);
+        assert_eq!(operand1_grad, 0.009866037165440211);
+        assert_eq!(operand2_grad, 0.009866037165440211);
+    }
+
+    #[test]
+    fn test_backpropagation_karpathys_example() {
+        let mut x1 = Expr::new_leaf(2.0);
+        x1.name = Some("x1".to_string());
+        let mut x2 = Expr::new_leaf(0.0);
+        x2.name = Some("x2".to_string());
+        let mut w1 = Expr::new_leaf(-3.0);
+        w1.name = Some("w1".to_string());
+        let mut w2 = Expr::new_leaf(1.0);
+        w2.name = Some("w2".to_string());
+        let mut b = Expr::new_leaf(6.8813735870195432);
+        b.name = Some("b".to_string());
+
+        let mut x1w1 = x1 * w1;
+        x1w1.name = Some("x1w1".to_string());
+        let mut x2w2 = x2 * w2;
+        x2w2.name = Some("x2w2".to_string());
+        let mut x1w1_x2w2 = x1w1 + x2w2;
+        x1w1_x2w2.name = Some("x1w1_x2w2".to_string());
+        let mut n = x1w1_x2w2 + b;
+        n.name = Some("n".to_string());
+        let o = n.tanh();
+        let mut tape = CompiledExpr::from_expr(o);
+
+        tape.learn(1e-09);
+
+        let n_grad = tape.get_grad_by_name("n").unwrap();
+        assert_float_eq(n_grad, 0.5);
+
+        let x1w1_x2w2_grad = tape.get_grad_by_name("x1w1_x2w2").unwrap();
+        assert_float_eq(x1w1_x2w2_grad, 0.5);
+
+        let b_grad = tape.get_grad_by_name("b").unwrap();
+        assert_float_eq(b_grad, 0.5);
+
+        let x1w1_grad = tape.get_grad_by_name("x1w1").unwrap();
+        assert_float_eq(x1w1_grad, 0.5);
+
+        let x2w2_grad = tape.get_grad_by_name("x2w2").unwrap();
+        assert_float_eq(x2w2_grad, 0.5);
+
+        let x1_grad = tape.get_grad_by_name("x1").unwrap();
+        assert_float_eq(x1_grad, -1.5);
+
+        let w1_grad = tape.get_grad_by_name("w1").unwrap();
+        assert_float_eq(w1_grad, 1.0);
+
+        let x2_grad = tape.get_grad_by_name("x2").unwrap();
+        assert_float_eq(x2_grad, 0.5);
+
+        let w2_grad = tape.get_grad_by_name("w2").unwrap();
+        assert_float_eq(w2_grad, 0.0);
     }
 }
