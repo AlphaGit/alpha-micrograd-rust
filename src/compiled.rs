@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::value::{Expr, ExprType, Operation};
+use crate::value::{Expr, Operation};
 
 struct CompiledExpr {
     operations: Vec<Operation>,
@@ -13,56 +13,27 @@ struct CompiledExpr {
 
 impl CompiledExpr {
     fn consume_expr(&mut self, expr: Expr) {
-        match expr.expr_type() {
-            ExprType::Leaf => {
-                self.results.push(expr.result);
-                self.operations.push(Operation::None);
-                self.lhs.push(None);
-                self.rhs.push(None);
-                self.gradients.push(expr.grad);
-                if let Some(name) = expr.name {
-                    self.names_to_index.insert(name, self.results.len() - 1);
-                }
-            }
-            ExprType::Unary => {
-                self.consume_expr(
-                    *expr
-                        .operand1
-                        .expect("Unary expression should have an operand"),
-                );
-                let lhs_index = self.results.len() - 1; // Last result is the operand
-                self.results.push(expr.result);
-                self.operations.push(expr.operation);
-                self.lhs.push(Some(lhs_index));
-                self.rhs.push(None);
-                self.gradients.push(expr.grad);
-                if let Some(name) = expr.name {
-                    self.names_to_index.insert(name, self.results.len() - 1);
-                }
-            }
-            ExprType::Binary => {
-                self.consume_expr(
-                    *expr
-                        .operand1
-                        .expect("Binary expression should have a left operand"),
-                );
-                let lhs_index = self.results.len() - 1;
-                self.consume_expr(
-                    *expr
-                        .operand2
-                        .expect("Binary expression should have a right operand"),
-                );
-                let rhs_index = self.results.len() - 1;
+        let lhs = if let Some(operand1) = expr.operand1 {
+            self.consume_expr(*operand1);
+            Some(self.results.len() - 1)
+        } else {
+            None
+        };
 
-                self.results.push(expr.result);
-                self.operations.push(expr.operation);
-                self.lhs.push(Some(lhs_index));
-                self.rhs.push(Some(rhs_index));
-                self.gradients.push(expr.grad);
-                if let Some(name) = expr.name {
-                    self.names_to_index.insert(name, self.results.len() - 1);
-                }
-            }
+        let rhs = if let Some(operand2) = expr.operand2 {
+            self.consume_expr(*operand2);
+            Some(self.results.len() - 1)
+        } else {
+            None
+        };
+
+        self.lhs.push(lhs);
+        self.rhs.push(rhs);
+        self.results.push(expr.result);
+        self.operations.push(expr.operation);
+        self.gradients.push(expr.grad);
+        if let Some(name) = expr.name {
+            self.names_to_index.insert(name, self.results.len() - 1);
         }
     }
 
