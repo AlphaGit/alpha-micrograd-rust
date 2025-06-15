@@ -8,7 +8,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
 
 #[derive(Debug, Clone, PartialEq)]
-enum Operation {
+pub(crate) enum Operation {
     None,
     Add,
     Sub,
@@ -33,7 +33,7 @@ impl Operation {
 }
 
 #[derive(Debug, PartialEq)]
-enum ExprType {
+pub(crate) enum ExprType {
     Leaf,
     Unary,
     Binary,
@@ -50,14 +50,15 @@ enum ExprType {
 /// A binary expression is the result of applying a binary operation to two other expressions. For example, the result of adding two leaf nodes.
 #[derive(Debug, Clone)]
 pub struct Expr {
-    operand1: Option<Box<Expr>>,
-    operand2: Option<Box<Expr>>,
-    operation: Operation,
+    pub(crate) operand1: Option<Box<Expr>>,
+    pub(crate) operand2: Option<Box<Expr>>,
+    /// The operation applied to the operands, if any.
+    pub(crate) operation: Operation,
     /// The numeric result of the expression, as result of applying the operation to the operands.
     pub result: f64,
     /// Whether the expression is learnable or not. Only learnable [`Expr`] will have their values updated during backpropagation (learning).
     pub is_learnable: bool,
-    grad: f64,
+    pub(crate) grad: f64,
     /// The name of the expression, used to identify it in the calculation graph.
     pub name: Option<String>,
 }
@@ -99,7 +100,7 @@ impl Expr {
         expr
     }
 
-    fn expr_type(&self) -> ExprType {
+    pub(crate) fn expr_type(&self) -> ExprType {
         match self.operation {
             Operation::None => ExprType::Leaf,
             Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => ExprType::Unary,
