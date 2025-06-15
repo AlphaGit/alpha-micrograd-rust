@@ -1,3 +1,4 @@
+use alpha_micrograd_rust::compiled::CompiledExpr;
 use alpha_micrograd_rust::nn::MLP;
 use alpha_micrograd_rust::value::Expr;
 
@@ -94,7 +95,8 @@ pub(crate) fn criterion_benchmark(c: &mut Criterion) {
                 let predictions = build_prediction_network(mlp, inputs);
                 let loss = build_loss_function(predictions, targets);
 
-                loss
+                let compiled_loss = CompiledExpr::from_expr(loss);
+                compiled_loss
             },
             |mut loss| {
                 let learning_rate = 0.01;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::value::{Expr, Operation};
 
-struct CompiledExpr {
+pub struct CompiledExpr {
     operations: Vec<Operation>,
     lhs: Vec<Option<usize>>,
     rhs: Vec<Option<usize>>,
