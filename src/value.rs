@@ -1,7 +1,8 @@
 //! A simple library for creating and backpropagating through expression trees.
 //! 
 //! This package includes the following elements to construct expression trees:
-//! - [`Expr`]: a node in the expression tree
+//! 
+//! - [`value::Expr`]: a node in the expression tree.
 #![deny(missing_docs)]
 use std::collections::VecDeque;
 use std::ops::{Add, Div, Mul, Sub};

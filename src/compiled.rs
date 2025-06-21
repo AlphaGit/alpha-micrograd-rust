@@ -1,13 +1,29 @@
+//! A compiled version of the expression tree for faster computation.
+//!
+//! This module provides a compiled version of the expression tree, which is faster to compute
+//! and backpropagate through than the regular expression tree, at the expense of not being
+//! able to modify it further.
+//! 
+//! This module contains the following elements:
+//! 
+//! - [`CompiledExpr`]: A struct that represents a compiled version of an expression tree.
+#![deny(missing_docs)]
 use std::collections::HashMap;
 
 use crate::value::{Expr, Operation};
 
+/// A compiled version of an expression tree.
+///
+/// This struct represents a compiled version of an expression tree, which is faster to compute
+/// and backpropagate through than the regular expression tree.
 pub struct CompiledExpr {
     operations: Vec<Operation>,
     lhs: Vec<Option<usize>>,
     rhs: Vec<Option<usize>>,
-    results: Vec<f64>,
-    gradients: Vec<f64>,
+    /// The results of the operations in the expression.
+    pub results: Vec<f64>,
+    /// The gradients of the operations in the expression.
+    pub gradients: Vec<f64>,
     is_learnable: Vec<bool>,
     names_to_index: HashMap<String, usize>,
 }
@@ -39,6 +55,21 @@ impl CompiledExpr {
         }
     }
 
+    /// Creates a new `CompiledExpr` from an expression.
+    ///
+    /// This method consumes the expression and transforms it into a compiled form
+    /// that is more efficient for computation and backpropagation.
+    ///
+    /// Example:
+    /// 
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// use alpha_micrograd_rust::compiled::CompiledExpr;
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.tanh();
+    /// let compiled = CompiledExpr::from_expr(expr2);
+    /// ```
     pub fn from_expr(expr: Expr) -> Self {
         let parameter_count = expr.parameter_count(false);
         let mut tape = CompiledExpr {
@@ -56,6 +87,29 @@ impl CompiledExpr {
         tape
     }
 
+    /// Recalculates the expression based on the current values.
+    ///
+    /// This method recalculates the expression based on the current values of the parameters.
+    /// It is more efficient than recalculating the expression tree, as it iterates through
+    /// an array of operations instead of traversing a tree structure.
+    ///
+    /// Example:
+    /// 
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// use alpha_micrograd_rust::compiled::CompiledExpr;
+    ///
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let expr2 = expr.tanh();
+    /// let mut compiled = CompiledExpr::from_expr(expr2);
+    /// assert_eq!(compiled.result(), 0.7615941559557649);
+    /// 
+    /// // Modify the value of "x"
+    /// compiled.set("x", 2.0);
+    /// compiled.recalculate();
+    /// 
+    /// assert_eq!(compiled.result(), 0.9640275800758169);
+    /// ```
     pub fn recalculate(&mut self) {
         for i in 0..self.results.len() {
             let operation = self.operations[i];
@@ -90,6 +144,37 @@ impl CompiledExpr {
         }
     }
 
+    /// Performs one step of learning (backpropagation) on the compiled expression.
+    ///
+    /// This function updates the values of the learnable parameters in the expression
+    /// based on the gradients calculated during backpropagation.
+    ///
+    /// # Arguments
+    ///
+    /// * `learning_rate` - The learning rate to use for updating the parameters.
+    ///
+    /// # Returns
+    ///
+    /// Returns nothing. The results are updated in place.
+    ///
+    /// Applies backpropagation to the expression, updating the values of the gradients and the expression itself.
+    ///
+    /// This method will change the gradients based on the gradient of the last expression in the
+    /// calculation graph. After adjusting the gradients, the method will update the values of
+    /// the individual expression nodes (parameters) to minimize the loss function.
+    ///
+    /// Example:
+    /// 
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// use alpha_micrograd_rust::compiled::CompiledExpr;
+    ///
+    /// let expr = Expr::new_leaf(1.0);
+    /// let expr2 = expr.tanh();
+    /// let mut compiled = CompiledExpr::from_expr(expr2);
+    /// compiled.learn(1e-09);
+    /// compiled.recalculate();
+    /// ```
     pub fn learn(&mut self, learning_rate: f64) {
         // set last gradient to 1.0
         self.gradients[self.results.len() - 1] = 1.0;
@@ -171,6 +256,14 @@ impl CompiledExpr {
         }
     }
 
+    /// Returns the final result of the compiled expression.
+    ///
+    /// This function returns the last result in the results vector, which corresponds
+    /// to the final output of the expression.
+    ///
+    /// # Returns
+    ///
+    /// Returns the final result as a `f64` value.
     pub fn result(&self) -> f64 {
         if self.results.is_empty() {
             0.0
@@ -179,11 +272,49 @@ impl CompiledExpr {
         }
     }
 
+    /// Gets the gradient of a learnable parameter by its name.
+    ///
+    /// This function retrieves the gradient of a learnable parameter (e.g., a weight or bias)
+    /// by looking up its name in the names-to-index mapping.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the parameter to get the gradient for.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `Option<f64>` containing the gradient value if found, or `None` if not found.
     pub fn get_grad_by_name(&self, name: &str) -> Option<f64> {
         if let Some(&index) = self.names_to_index.get(name) {
             return Some(self.gradients[index]);
         }
         None
+    }
+
+    /// Sets the value of a parameter by its name.
+    ///
+    /// This method sets the value of a parameter in the compiled expression.
+    /// It is used to modify the values of leaf nodes in the expression tree.
+    ///
+    /// Example:
+    /// 
+    /// ```rust
+    /// use alpha_micrograd_rust::value::Expr;
+    /// use alpha_micrograd_rust::compiled::CompiledExpr;
+    ///
+    /// let expr = Expr::new_leaf_with_name(1.0, "x");
+    /// let expr2 = expr.tanh();
+    /// let mut compiled = CompiledExpr::from_expr(expr2);
+    /// 
+    /// compiled.set("x", 2.0);
+    /// compiled.recalculate();
+    /// 
+    /// assert_eq!(compiled.result(), 0.9640275800758169);
+    /// ```
+    pub fn set(&mut self, name: &str, value: f64) {
+        if let Some(&index) = self.names_to_index.get(name) {
+            self.results[index] = value;
+        }
     }
 }
 
