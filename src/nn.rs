@@ -64,7 +64,7 @@ impl Neuron {
 
         let weights = (1..=n_inputs)
             .map(|_| between.sample(&mut rng))
-            .map(|n| Expr::new_leaf(n))
+            .map(Expr::new_leaf)
             .collect();
 
         Neuron {
@@ -135,10 +135,10 @@ impl Display for Layer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let neurons = self.neurons
             .iter()
-            .map(|n| format!("{:}", n))
+            .map(|n| format!("{n:}"))
             .collect::<Vec<_>>()
             .join("\n - ");
-        write!(f, "Layer:\n - {:}", neurons)
+        write!(f, "Layer:\n - {neurons:}")
     }
 }
 
@@ -182,10 +182,10 @@ impl Display for MLP {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let layers = self.layers
             .iter()
-            .map(|l| format!("{:}", l))
+            .map(|l| format!("{l:}"))
             .collect::<Vec<_>>()
             .join("\n\n");
-        write!(f, "MLP:\n{:}", layers)
+        write!(f, "MLP:\n{layers:}")
     }
 }
 

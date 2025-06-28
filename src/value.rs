@@ -345,7 +345,7 @@ impl Expr {
             Operation::Neg => {
                 self.grad = -child_grad;
             }
-            _ => panic!("Invalid unary operation {:?}", child_operation),
+            _ => panic!("Invalid unary operation {child_operation:?}"),
         }
     }
 
@@ -373,7 +373,7 @@ impl Expr {
 
                 self.grad = child_grad * exponent * base.powf(exponent - 1.0);
             }
-            _ => panic!("Invalid binary operation: {:?}", child_operation),
+            _ => panic!("Invalid binary operation: {child_operation:?}"),
         }
     }
 
@@ -401,7 +401,7 @@ impl Expr {
 
                 self.grad = child_grad * base.powf(exponent) * base.ln();
             }
-            _ => panic!("Invalid binary operation: {:?}", child_operation),
+            _ => panic!("Invalid binary operation: {child_operation:?}"),
         }
     }
 
