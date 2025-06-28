@@ -10,7 +10,8 @@
 #![deny(missing_docs)]
 use std::collections::HashMap;
 
-use crate::value::{Expr, Operation};
+use crate::value::Expr;
+use crate::operations::Operation;
 
 /// A compiled version of an expression tree.
 ///
