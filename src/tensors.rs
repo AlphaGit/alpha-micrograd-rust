@@ -46,6 +46,31 @@ impl TensorShape {
 
         TensorShape::new(new_shape)
     }
+
+    fn position_iter(&self) -> impl Iterator<Item = Vec<usize>> + '_ {
+        let mut indices = vec![0; self.dimensions.len()];
+        let total_size = self.size();
+        let mut count = 0;
+
+        std::iter::from_fn(move || {
+            if count >= total_size {
+                return None;
+            }
+
+            let current_indices = indices.clone();
+            count += 1;
+
+            for i in (0..indices.len()).rev() {
+                indices[i] += 1;
+                if indices[i] < self.dimensions[i] {
+                    break;
+                }
+                indices[i] = 0;
+            }
+
+            Some(current_indices)
+        })
+    }
 }
 
 struct Tensor {
@@ -78,6 +103,37 @@ impl Tensor {
             data: vec![value],
             shape: TensorShape::new(vec![1]),
         }
+    }
+
+    fn get(&self, indices: &[usize]) -> f32 {
+        assert_eq!(indices.len(), self.shape.dimensions.len());
+        let mut flat_index = 0;
+        let mut stride = 1;
+
+        for (i, &dim) in self.shape.dimensions.iter().rev().enumerate() {
+            let idx = indices[self.shape.dimensions.len() - 1 - i];
+            assert!(idx < dim, "Index out of bounds");
+            flat_index += idx * stride;
+            stride *= dim;
+        }
+
+        self.data[flat_index]
+    }
+
+    fn get_broadcasted(&self, indices: &[usize], target_shape: &TensorShape) -> f32 {
+        assert!(target_shape.dimensions.len() >= self.shape.dimensions.len());
+        let mut adjusted_indices = vec![0; self.shape.dimensions.len()];
+        let offset = target_shape.dimensions.len() - self.shape.dimensions.len();
+
+        for i in 0..self.shape.dimensions.len() {
+            if self.shape.dimensions[i] == 1 {
+                adjusted_indices[i] = 0;
+            } else {
+                adjusted_indices[i] = indices[i + offset];
+            }
+        }
+
+        self.get(&adjusted_indices)
     }
 }
 
@@ -196,19 +252,17 @@ impl Add for TensorExpression {
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
-        assert_eq!(
-            self.result.shape.dimensions,
-            other.result.shape.dimensions,
-            "Tensors must have the same shape for addition"
-        );
+        let combined_shape = TensorShape::broadcast(&self.result.shape, &other.result.shape);
 
-        let result_data: Vec<f32> = self
-            .result
-            .data
-            .iter()
-            .zip(other.result.data.iter())
-            .map(|(&a, &b)| a + b)
-            .collect();
+        let result_data = combined_shape
+            .position_iter()
+            .map(|pos| {
+                let value1 = self.result.get_broadcasted(&pos, &combined_shape);
+                let value2 = other.result.get_broadcasted(&pos, &combined_shape);
+                value1 + value2
+            })
+            .collect::<Vec<f32>>();
+
         let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
 
         TensorExpression::new_binary(self, other, Operation::Add, result_tensor)
@@ -328,18 +382,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Tensors must have the same shape for addition")]
+    #[should_panic(expected = "Shapes are not compatible for broadcasting: [2, 2] and [3, 1]")]
     fn test_tensor_expression_add_shape_mismatch() {
         let data1 = vec![1.0, 2.0, 3.0, 4.0];
-        let data2 = vec![5.0, 6.0];
+        let data2 = vec![5.0, 6.0, 7.0];
 
         let tensor1 = Tensor::from_data(data1, vec![2, 2]);
-        let tensor2 = Tensor::from_data(data2, vec![1, 2]);
+        let tensor2 = Tensor::from_data(data2, vec![3, 1]);
 
         let expr1 = TensorExpression::new_leaf(tensor1, false, None);
         let expr2 = TensorExpression::new_leaf(tensor2, false, None);
 
-        let _result = expr1 + expr2; // This should panic
+        let _result = expr1 + expr2;
     }
 
     #[test]
@@ -390,7 +444,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_tensor_expression_add_broadcasting() {
         let data1 = vec![1.0, 2.0, 3.0];
         let shape1 = vec![3];
@@ -460,5 +513,181 @@ mod tests {
         
         // This should panic with a message about incompatible shapes
         let _result = TensorShape::broadcast(&shape1, &shape2);
+    }
+
+    #[test]
+    fn test_tensor_get_1d() {
+        // Test getting values from a 1D tensor
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let shape = vec![5];
+        let tensor = Tensor::from_data(data, shape);
+        
+        assert_eq!(tensor.get(&[0]), 1.0);
+        assert_eq!(tensor.get(&[2]), 3.0);
+        assert_eq!(tensor.get(&[4]), 5.0);
+    }
+
+    #[test]
+    fn test_tensor_get_2d() {
+        // Test getting values from a 2D tensor
+        // Create a 2x3 matrix: [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let shape = vec![2, 3];
+        let tensor = Tensor::from_data(data, shape);
+        
+        assert_eq!(tensor.get(&[0, 0]), 1.0);
+        assert_eq!(tensor.get(&[0, 2]), 3.0);
+        assert_eq!(tensor.get(&[1, 0]), 4.0);
+        assert_eq!(tensor.get(&[1, 2]), 6.0);
+    }
+
+    #[test]
+    fn test_tensor_get_3d() {
+        // Test getting values from a 3D tensor
+        // Create a 2x2x2 tensor
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let shape = vec![2, 2, 2];
+        let tensor = Tensor::from_data(data, shape);
+        
+        assert_eq!(tensor.get(&[0, 0, 0]), 1.0);
+        assert_eq!(tensor.get(&[0, 0, 1]), 2.0);
+        assert_eq!(tensor.get(&[0, 1, 0]), 3.0);
+        assert_eq!(tensor.get(&[0, 1, 1]), 4.0);
+        assert_eq!(tensor.get(&[1, 0, 0]), 5.0);
+        assert_eq!(tensor.get(&[1, 1, 1]), 8.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Index out of bounds")]
+    fn test_tensor_get_out_of_bounds() {
+        // Test that accessing an out-of-bounds index panics
+        let data = vec![1.0, 2.0, 3.0];
+        let shape = vec![3];
+        let tensor = Tensor::from_data(data, shape);
+        
+        // This should panic
+        tensor.get(&[3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_tensor_get_wrong_dimensions() {
+        // Test that providing the wrong number of indices panics
+        let data = vec![1.0, 2.0, 3.0, 4.0];
+        let shape = vec![2, 2];
+        let tensor = Tensor::from_data(data, shape);
+        
+        // This should panic - trying to access a 2D tensor with only one index
+        tensor.get(&[1]);
+    }
+
+    #[test]
+    fn test_tensor_get_scalar() {
+        // Test getting the value from a scalar tensor
+        let tensor = Tensor::from_scalar(42.0);
+        
+        assert_eq!(tensor.get(&[0]), 42.0);
+    }
+
+    #[test]
+    fn test_get_broadcasted_scalar_to_2d() {
+        // Broadcasting a scalar to a 2D tensor
+        let tensor = Tensor::from_scalar(7.0);
+        let target_shape = TensorShape::new(vec![3, 4]);
+        for i in 0..3 {
+            for j in 0..4 {
+                assert_eq!(tensor.get_broadcasted(&[i, j], &target_shape), 7.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_broadcasted_1d_to_2d() {
+        // Broadcasting a 1D tensor to a 2D tensor
+        let tensor = Tensor::from_data(vec![1.0, 2.0, 3.0], vec![3]);
+        let target_shape = TensorShape::new(vec![2, 3]);
+        for i in 0..2 {
+            for j in 0..3 {
+                assert_eq!(tensor.get_broadcasted(&[i, j], &target_shape), tensor.get(&[j]));
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_broadcasted_2d_singleton_to_2d() {
+        // Broadcasting a 2D tensor with a singleton dimension to a larger 2D tensor
+        let tensor = Tensor::from_data(vec![5.0, 6.0], vec![1, 2]);
+        let target_shape = TensorShape::new(vec![4, 2]);
+        for i in 0..4 {
+            for j in 0..2 {
+                assert_eq!(tensor.get_broadcasted(&[i, j], &target_shape), tensor.get(&[0, j]));
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_broadcasted_1d_to_3d() {
+        // Broadcasting a 1D tensor to a 3D tensor
+        let tensor = Tensor::from_data(vec![10.0, 20.0], vec![2]);
+        let target_shape = TensorShape::new(vec![3, 2, 2]);
+        for i in 0..3 {
+            for j in 0..2 {
+                for k in 0..2 {
+                    assert_eq!(tensor.get_broadcasted(&[i, j, k], &target_shape), tensor.get(&[k]));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_broadcasted_2_1_2_to_2_4_2() {
+        // Original shape: (2, 1, 2)
+        // Broadcasted shape: (2, 4, 2)
+        // Data layout: [[[a, b]], [[c, d]]]
+        let data = vec![1.0, 2.0, 3.0, 4.0];
+        let tensor = Tensor::from_data(data, vec![2, 1, 2]);
+        let target_shape = TensorShape::new(vec![2, 4, 2]);
+        // For each i in 0..2, j in 0..4, k in 0..2, the value should be tensor.get(&[i, 0, k])
+        for i in 0..2 {
+            for j in 0..4 {
+                for k in 0..2 {
+                    let expected = tensor.get(&[i, 0, k]);
+                    assert_eq!(tensor.get_broadcasted(&[i, j, k], &target_shape), expected, "Mismatch at [{}, {}, {}]", i, j, k);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_position_iter_1d() {
+        let shape = TensorShape::new(vec![3]);
+        let positions: Vec<_> = shape.position_iter().collect();
+        assert_eq!(positions, vec![vec![0], vec![1], vec![2]]);
+    }
+
+    #[test]
+    fn test_position_iter_2d() {
+        let shape = TensorShape::new(vec![2, 2]);
+        let positions: Vec<_> = shape.position_iter().collect();
+        assert_eq!(positions, vec![vec![0, 0], vec![0, 1], vec![1, 0], vec![1, 1]]);
+    }
+
+    #[test]
+    fn test_position_iter_3d() {
+        let shape = TensorShape::new(vec![2, 1, 2]);
+        let positions: Vec<_> = shape.position_iter().collect();
+        assert_eq!(positions, vec![
+            vec![0, 0, 0],
+            vec![0, 0, 1],
+            vec![1, 0, 0],
+            vec![1, 0, 1],
+        ]);
+    }
+
+    #[test]
+    fn test_position_iter_empty() {
+        let shape = TensorShape::new(vec![]);
+        let positions: Vec<_> = shape.position_iter().collect();
+        assert_eq!(positions, vec![vec![]]);
     }
 }
