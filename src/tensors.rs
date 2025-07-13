@@ -1,4 +1,4 @@
-use std::{ops::Add, vec};
+use std::{ops::{Add, Mul}, vec};
 
 use crate::operations::{Operation, OperationType};
 
@@ -246,6 +246,66 @@ impl TensorExpression {
 
         TensorExpression::new_binary(self, exponent_tensor, Operation::Pow, result_tensor)
     }
+
+    fn matrix_multiplication(self, other: Self) -> TensorExpression {
+        // self: A, i, j, ..., k
+        // other: B, k, ...l, m
+        // result: C, i, j, ..., l, m
+        let a_k = self.result.shape.dimensions.last().unwrap().clone();
+        let pos_k = self.result.shape.dimensions.len() - 1;
+        let b_k = other.result.shape.dimensions.last().unwrap().clone();
+
+        assert!(a_k == b_k || a_k == 1 || b_k == 1, "Matrix multiplication requires the inner dimensions to match or be 1");
+        let max_k = a_k.max(b_k);
+
+        let final_dimensions = self.result.shape.dimensions[..pos_k]
+            .iter()
+            .chain(other.result.shape.dimensions.iter().skip(1))
+            .cloned()
+            .collect::<Vec<usize>>();
+        let final_shape = TensorShape::new(final_dimensions);
+
+        let result_data = final_shape
+            .position_iter()
+            .map(|pos| {
+                let mut sum = 0.0;
+                let mut a_indexing = pos.iter().take(pos_k).cloned().collect::<Vec<usize>>();
+                a_indexing.push(0); // Placeholder for the k dimension
+
+                let mut b_indexing = pos.iter().skip(pos_k).cloned().collect::<Vec<usize>>();
+                b_indexing.insert(0, 0); // Placeholder for the k dimension
+
+                for k in 0..max_k {
+                    a_indexing[pos_k] = k.min(a_k - 1); // k or 0 if a_k is 1
+                    let a = self.result.get(&a_indexing);
+
+                    b_indexing[0] = k.min(b_k - 1); // k or 0 if b_k is 1
+                    let b = other.result.get(&b_indexing);
+                    sum += a * b;
+                }
+                sum
+            })
+            .collect::<Vec<f32>>();
+
+        let result_tensor = Tensor::from_data(result_data, final_shape.dimensions);
+
+        TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
+    }
+    
+    fn element_wise_multiplication(self, other: Self) -> Self {
+        let combined_shape = TensorShape::broadcast(&self.result.shape, &other.result.shape);
+        let result_data = combined_shape
+            .position_iter()
+            .map(|pos| {
+                let value1 = self.result.get_broadcasted(&pos, &combined_shape);
+                let value2 = other.result.get_broadcasted(&pos, &combined_shape);
+                value1 * value2
+            })
+            .collect::<Vec<f32>>();
+
+        let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
+        TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
+    }
 }
 
 impl Add for TensorExpression {
@@ -277,6 +337,30 @@ impl Add<f32> for TensorExpression {
         let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
 
         self + scalar_expression
+    }
+}
+
+impl Mul<f32> for TensorExpression {
+    type Output = Self;
+
+    fn mul(self, scalar: f32) -> Self::Output {
+        let scalar_tensor = Tensor::from_scalar(scalar);
+        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
+
+        self.element_wise_multiplication(scalar_expression)
+    }
+}
+
+impl Mul for TensorExpression {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self::Output {
+        if self.result.shape.dimensions.len() > 1 || 
+           other.result.shape.dimensions.len() > 1 {
+            return self.matrix_multiplication(other);
+        }
+
+        return self.element_wise_multiplication(other);
     }
 }
 
@@ -689,5 +773,123 @@ mod tests {
         let shape = TensorShape::new(vec![]);
         let positions: Vec<_> = shape.position_iter().collect();
         assert_eq!(positions, vec![vec![]]);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_2d() {
+        // 2x2 * 2x2
+        let data1 = vec![1.0, 2.0, 3.0, 4.0];
+        let data2 = vec![5.0, 6.0, 7.0, 8.0];
+        let shape = vec![2, 2];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        // Manual matrix multiplication result
+        // [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]] = [[19, 22], [43, 50]]
+        assert_eq!(result.result.data, vec![19.0, 22.0, 43.0, 50.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_2d_1d() {
+        // dimensionality: (2, 2) * (2) => (2)
+        let data1 = vec![1.0, 2.0, 3.0, 4.0];
+        let data2 = vec![5.0, 6.0];
+        let shape1 = vec![2, 2];
+        let shape2 = vec![2];
+
+        let tensor1 = Tensor::from_data(data1, shape1.clone());
+        let tensor2 = Tensor::from_data(data2, shape2.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        // Manual result: for each i in 0..2, j in 0..2: result[i] = tensor1[i,j] * tensor2[j]
+        // [1*5+2*6, 3*5+4*6] = [17.0, 39.0]
+        assert_eq!(result.result.data, vec![17.0, 39.0]);
+        assert_eq!(result.result.shape.dimensions, vec![2]);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_element_wise() {
+        // [1,2,3] * [4,5,6] = [1*4, 2*5, 3*6] = [4, 10, 18]
+        let data1 = vec![1.0, 2.0, 3.0];
+        let data2 = vec![4.0, 5.0, 6.0];
+        let shape = vec![3];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        // Should be a scalar
+        assert_eq!(result.result.data, vec![4.0, 10.0, 18.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_scalar() {
+        // 2x2 * scalar
+        let data = vec![1.0, 2.0, 3.0, 4.0];
+        let shape = vec![2, 2];
+        let scalar = 10.0;
+
+        let tensor = Tensor::from_data(data.clone(), shape.clone());
+        let expr = TensorExpression::new_leaf(tensor, false, None);
+
+        let result = expr * scalar;
+
+        // Each element multiplied by scalar
+        assert_eq!(result.result.data, vec![10.0, 20.0, 30.0, 40.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_2x2x2_times_2x2x2() {
+        // 2x2x2 * 2x2x2
+        let data1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let data2 = vec![9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+        let shape = vec![2, 2, 2];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        assert_eq!(result.result.data, vec![35.0, 38.0, 41.0, 44.0, 79.0, 86.0, 93.0, 100.0, 123.0, 134.0, 145.0, 156.0, 167.0, 182.0, 197.0, 212.0]);
+        assert_eq!(result.result.shape.dimensions, vec![2, 2, 2, 2]);
+    }
+
+    #[test]
+    fn test_tensor_expression_mul_3x3_times_3x3() {
+        // 3x3 * 3x3
+        let data1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let data2 = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+        let shape = vec![3, 3];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        assert_eq!(result.result.data, vec![30.0, 24.0, 18.0, 84.0, 69.0, 54.0, 138.0, 114.0, 90.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
     }
 }
