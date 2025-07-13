@@ -1,4 +1,4 @@
-use std::{ops::{Add, Mul}, vec};
+use std::{ops::{Add, Mul, Sub}, vec};
 
 use crate::operations::{Operation, OperationType};
 
@@ -306,12 +306,8 @@ impl TensorExpression {
         let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
         TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
     }
-}
 
-impl Add for TensorExpression {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self::Output {
+    fn element_to_element_operation(self, other: Self, operation: Operation) -> TensorExpression {
         let combined_shape = TensorShape::broadcast(&self.result.shape, &other.result.shape);
 
         let result_data = combined_shape
@@ -319,13 +315,34 @@ impl Add for TensorExpression {
             .map(|pos| {
                 let value1 = self.result.get_broadcasted(&pos, &combined_shape);
                 let value2 = other.result.get_broadcasted(&pos, &combined_shape);
-                value1 + value2
+                match operation {
+                    Operation::Add => value1 + value2,
+                    Operation::Sub => value1 - value2,
+                    Operation::Mul => value1 * value2,
+                    _ => panic!("Unsupported operation for element-wise operation"),
+                }
             })
             .collect::<Vec<f32>>();
 
         let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
 
-        TensorExpression::new_binary(self, other, Operation::Add, result_tensor)
+        TensorExpression::new_binary(self, other, operation, result_tensor)
+    }
+
+    fn matrix_addition(self, other: Self) -> TensorExpression {
+        self.element_to_element_operation(other, Operation::Add)
+    }
+
+    fn matrix_subtraction(self, other: Self) -> TensorExpression {
+        self.element_to_element_operation(other, Operation::Sub)
+    }
+}
+
+impl Add for TensorExpression {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        self.matrix_addition(other)
     }
 }
 
@@ -360,14 +377,31 @@ impl Mul for TensorExpression {
             return self.matrix_multiplication(other);
         }
 
-        return self.element_wise_multiplication(other);
+        self.element_wise_multiplication(other)
+    }
+}
+
+impl Sub for TensorExpression {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        self.matrix_subtraction(other)
+    }
+}
+
+impl Sub<f32> for TensorExpression {
+    type Output = Self;
+
+    fn sub(self, scalar: f32) -> Self::Output {
+        let scalar_tensor = Tensor::from_scalar(scalar);
+        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
+
+        self - scalar_expression
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::result;
-
     use super::*;
 
     #[test]
@@ -946,5 +980,67 @@ mod tests {
         // Should be a vector of size 2
         assert_eq!(result.result.data, vec![1.0, 2.0]);
         assert_eq!(result.result.shape.dimensions, vec![2]);
+    }
+
+    #[test]
+    fn test_tensor_expression_sub() {
+        let data1 = vec![5.0, 7.0, 9.0, 11.0];
+        let data2 = vec![1.0, 2.0, 3.0, 4.0];
+        let shape = vec![2, 2];
+
+        let tensor1 = Tensor::from_data(data1.clone(), shape.clone());
+        let tensor2 = Tensor::from_data(data2.clone(), shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 - expr2;
+        assert_eq!(result.result.data, vec![4.0, 5.0, 6.0, 7.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+        assert_eq!(result.operation, Operation::Sub);
+        assert!(result.operand1.is_some());
+        assert!(result.operand2.is_some());
+    }
+
+    #[test]
+    fn test_tensor_expression_sub_scalar() {
+        let data = vec![10.0, 20.0];
+        let shape = vec![2];
+        let scalar = 3.0;
+
+        let tensor = Tensor::from_data(data.clone(), shape.clone());
+        let expr = TensorExpression::new_leaf(tensor, false, None);
+
+        let result = expr - scalar;
+        assert_eq!(result.result.data, vec![7.0, 17.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+        assert_eq!(result.operation, Operation::Sub);
+        assert!(result.operand1.is_some());
+        assert!(result.operand2.is_some());
+        if let Some(op2) = &result.operand2 {
+            assert_eq!(op2.result.data, vec![scalar]);
+            assert_eq!(op2.result.shape.dimensions, vec![1]);
+        }
+    }
+
+    #[test]
+    fn test_tensor_expression_chained_sub() {
+        let data1 = vec![10.0, 20.0];
+        let data2 = vec![1.0, 2.0];
+        let data3 = vec![3.0, 4.0];
+        let shape = vec![2];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+        let tensor3 = Tensor::from_data(data3, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+        let expr3 = TensorExpression::new_leaf(tensor3, false, None);
+
+        let result = expr1 - expr2 - expr3;
+        assert_eq!(result.result.data, vec![6.0, 14.0]); // (10-1)-3, (20-2)-4
+        assert_eq!(result.result.shape.dimensions, shape);
+        assert_eq!(result.operation, Operation::Sub);
     }
 }
