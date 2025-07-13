@@ -366,6 +366,8 @@ impl Mul for TensorExpression {
 
 #[cfg(test)]
 mod tests {
+    use std::result;
+
     use super::*;
 
     #[test]
@@ -891,5 +893,58 @@ mod tests {
 
         assert_eq!(result.result.data, vec![30.0, 24.0, 18.0, 84.0, 69.0, 54.0, 138.0, 114.0, 90.0]);
         assert_eq!(result.result.shape.dimensions, shape);
+    }
+
+    #[test]
+    fn test_numpy_matmul_example_2x2_times_2x2() {
+        // https://numpy.org/doc/stable/reference/generated/numpy.matmul.html
+        // Numpy example: 2x2 * 2x2
+        let data1 = vec![1.0, 0.0, 0.0, 1.0];
+        let data2 = vec![4.0, 1.0, 2.0, 2.0];
+        let shape = vec![2, 2];
+
+        let tensor1 = Tensor::from_data(data1, shape.clone());
+        let tensor2 = Tensor::from_data(data2, shape.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        assert_eq!(result.result.data, vec![4.0, 1.0, 2.0, 2.0]);
+        assert_eq!(result.result.shape.dimensions, shape);
+    }
+
+    #[test]
+    fn test_numpy_matmul_example_2x2_times_2() {
+        // Numpy example: 2x2 * 2
+        let data1 = vec![1.0, 0.0, 0.0, 1.0];
+        let data2 = vec![1.0, 2.0];
+        let shape1 = vec![2, 2];
+        let shape2 = vec![2];
+
+        let tensor1 = Tensor::from_data(data1.clone(), shape1.clone());
+        let tensor2 = Tensor::from_data(data2.clone(), shape2.clone());
+
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+
+        let result = expr1 * expr2;
+
+        // Should be a vector of size 2
+        assert_eq!(result.result.data, vec![1.0, 2.0]);
+        assert_eq!(result.result.shape.dimensions, vec![2]);
+
+        // The other way around: 2 * 2x2
+        let tensor1 = Tensor::from_data(data1, shape1.clone());
+        let expr1 = TensorExpression::new_leaf(tensor1, false, None);
+
+        let tensor2 = Tensor::from_data(data2, shape2.clone());
+        let expr2 = TensorExpression::new_leaf(tensor2, false, None);
+        let result = expr2 * expr1;
+
+        // Should be a vector of size 2
+        assert_eq!(result.result.data, vec![1.0, 2.0]);
+        assert_eq!(result.result.shape.dimensions, vec![2]);
     }
 }
