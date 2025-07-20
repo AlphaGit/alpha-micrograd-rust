@@ -1,8 +1,10 @@
-use std::{ops::{Add, Mul, Sub}, vec};
+use std::{fmt::Display, ops::{Add, Mul, Sub}, vec};
 
 use crate::operations::{Operation, OperationType};
 
-struct TensorShape {
+/// Represents the shape (dimensions) of a tensor.
+#[derive(Debug, Clone)]
+pub struct TensorShape {
     dimensions: Vec<usize>,
 }
 
@@ -73,9 +75,19 @@ impl TensorShape {
     }
 }
 
-struct Tensor {
-    data: Vec<f32>,
-    shape: TensorShape,
+impl PartialEq for TensorShape {
+    fn eq(&self, other: &Self) -> bool {
+        self.dimensions == other.dimensions
+    }
+}
+
+/// Represents a multi-dimensional array of f32 values with a specific shape.
+#[derive(Clone)]
+pub struct Tensor {
+    /// The flattened data of the tensor, stored in row-major order.
+    pub data: Vec<f32>,
+    /// The shape (dimensions) of the tensor.
+    pub shape: TensorShape,
 }
 
 impl Tensor {
@@ -88,7 +100,17 @@ impl Tensor {
         }
     }
 
-    fn from_data(data: Vec<f32>, shape: Vec<usize>) -> Self {
+    /// Creates a tensor from the given data and shape.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A vector of f32 values representing the tensor's elements.
+    /// * `shape` - A vector of usize values representing the dimensions of the tensor.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of elements in `data` does not match the product of the dimensions in `shape`.
+    pub fn from_data(data: Vec<f32>, shape: Vec<usize>) -> Self {
         let shape = TensorShape::new(shape);
         assert_eq!(
             data.len(),
@@ -98,7 +120,16 @@ impl Tensor {
         Tensor { data, shape }
     }
 
-    fn from_scalar(value: f32) -> Self {
+    /// Creates a tensor from a single scalar value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The scalar value to be stored in the tensor.
+    ///
+    /// # Returns
+    ///
+    /// A tensor containing the scalar value with shape `[1]`.
+    pub fn from_scalar(value: f32) -> Self {
         Tensor {
             data: vec![value],
             shape: TensorShape::new(vec![1]),
@@ -135,20 +166,40 @@ impl Tensor {
 
         self.get(&adjusted_indices)
     }
+
+    /// Returns the sum of all elements in the tensor.
+    /// 
+    /// # Returns
+    /// 
+    /// The sum of all elements as a single f32 value.
+    pub fn sum(self) -> f32 {
+        self.data.iter().sum::<f32>()
+    }
 }
 
-struct TensorExpression {
+#[derive(Clone)]
+/// Represents a node in a tensor computation graph, which can be a leaf tensor or an operation applied to one or more tensors.
+pub struct TensorExpression {
     operand1: Option<Box<TensorExpression>>,
     operand2: Option<Box<TensorExpression>>,
     operation: Operation,
-    result: Tensor,
-    is_learnable: bool,
+    /// The result tensor of this expression node.
+    pub result: Tensor,
+    /// Indicates whether this tensor is a learnable parameter.
+    pub is_learnable: bool,
     grad: Option<Tensor>,
     name: Option<String>,
 }
 
 impl TensorExpression {
-    fn new_leaf(tensor: Tensor, is_learnable: bool, name: Option<String>) -> Self {
+    /// Creates a new leaf node in the tensor expression tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `tensor` - The tensor value for this leaf node.
+    /// * `is_learnable` - Whether this tensor is a learnable parameter.
+    /// * `name` - An optional name for this tensor expression.
+    pub fn new_leaf(tensor: Tensor, is_learnable: bool, name: Option<String>) -> Self {
         TensorExpression {
             operand1: None,
             operand2: None,
@@ -195,7 +246,12 @@ impl TensorExpression {
         }
     }
 
-    fn tanh(self) -> Self {
+    /// Applies the hyperbolic tangent (tanh) activation function element-wise to the tensor.
+    ///
+    /// # Returns
+    ///
+    /// A new tensor expression where each element is replaced by its tanh value.
+    pub fn tanh(self) -> Self {
         let result = self
             .result
             .data
@@ -207,7 +263,12 @@ impl TensorExpression {
         TensorExpression::new_unary(self, Operation::Tanh, result_tensor)
     }
 
-    fn relu(self) -> Self {
+    /// Applies the ReLU (Rectified Linear Unit) activation function element-wise to the tensor.
+    ///
+    /// # Returns
+    ///
+    /// A new tensor expression where each element is replaced by the maximum of 0.0 and the original value.
+    pub fn relu(self) -> Self {
         let result = self
             .result
             .data
@@ -231,7 +292,16 @@ impl TensorExpression {
         TensorExpression::new_unary(self, Operation::Exp, result_tensor)
     }
 
-    fn pow(self, exponent: f32) -> Self {
+    /// Raises each element of the tensor to the specified power.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `exponent` - The power to raise each element to.
+    /// 
+    /// # Returns
+    /// 
+    /// A new tensor expression where each element is raised to the given power.
+    pub fn pow(self, exponent: f32) -> Self {
         let result = self
             .result
             .data
@@ -253,9 +323,11 @@ impl TensorExpression {
         // result: C, i, j, ..., l, m
         let a_k = self.result.shape.dimensions.last().unwrap().clone();
         let pos_k = self.result.shape.dimensions.len() - 1;
-        let b_k = other.result.shape.dimensions.last().unwrap().clone();
+        let b_k = other.result.shape.dimensions.first().unwrap().clone();
 
-        assert!(a_k == b_k || a_k == 1 || b_k == 1, "Matrix multiplication requires the inner dimensions to match or be 1");
+        assert!(a_k == b_k || a_k == 1 || b_k == 1,
+            "Matrix multiplication requires the inner dimensions to match or be 1, got {:?} (from {:?}) and {:?} (from {:?})",
+            a_k, self.result.shape, b_k, other.result.shape);
         let max_k = a_k.max(b_k);
 
         let final_dimensions = self.result.shape.dimensions[..pos_k]
@@ -324,7 +396,7 @@ impl TensorExpression {
             })
             .collect::<Vec<f32>>();
 
-        let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
+        let result_tensor = Tensor::from_data(result_data, combined_shape.dimensions);
 
         TensorExpression::new_binary(self, other, operation, result_tensor)
     }
@@ -335,6 +407,29 @@ impl TensorExpression {
 
     fn matrix_subtraction(self, other: Self) -> TensorExpression {
         self.element_to_element_operation(other, Operation::Sub)
+    }
+
+    /// Counts the number of parameters in the tensor expression tree.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `learnable_only` - If true, only counts learnable parameters.
+    /// 
+    /// # Returns
+    /// 
+    /// The total number of parameters in this expression and its operands.
+    pub fn parameter_count(&self, learnable_only: bool) -> usize {
+        let mut count = 0;
+        if self.is_learnable {
+            count += self.result.data.len();
+        }
+        if let Some(operand1) = &self.operand1 {
+            count += operand1.parameter_count(learnable_only);
+        }
+        if let Some(operand2) = &self.operand2 {
+            count += operand2.parameter_count(learnable_only);
+        }
+        count
     }
 }
 
@@ -397,6 +492,21 @@ impl Sub<f32> for TensorExpression {
         let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
 
         self - scalar_expression
+    }
+}
+
+impl Display for TensorExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = &self.name {
+            write!(f, "{}", name)
+        } else {
+            let op1_str = self.operand1.as_ref().map_or("None".to_string(), |op| op.to_string());
+            let op2_str = self.operand2.as_ref().map_or("None".to_string(), |op| op.to_string());
+            write!(f, "TensorExpression: {} {:?} {}", 
+                   op1_str,
+                   self.operation,
+                   op2_str)
+        }
     }
 }
 

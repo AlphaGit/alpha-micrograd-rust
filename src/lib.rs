@@ -15,3 +15,5 @@ pub mod compiled;
 pub mod tensors;
 /// Module containing operation types and enums
 pub mod operations;
+/// Module containing tensor neural network operations
+pub mod tensor_nn;
