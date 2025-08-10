@@ -73,6 +73,10 @@ impl TensorShape {
             Some(current_indices)
         })
     }
+
+    fn is_scalar(&self) -> bool {
+        self.dimensions.len() == 1 && self.dimensions[0] == 1
+    }
 }
 
 impl PartialEq for TensorShape {
@@ -81,11 +85,11 @@ impl PartialEq for TensorShape {
     }
 }
 
-/// Represents a multi-dimensional array of f32 values with a specific shape.
+/// Represents a multi-dimensional array of f64 values with a specific shape.
 #[derive(Clone)]
 pub struct Tensor {
     /// The flattened data of the tensor, stored in row-major order.
-    pub data: Vec<f32>,
+    pub data: Vec<f64>,
     /// The shape (dimensions) of the tensor.
     pub shape: TensorShape,
 }
@@ -104,13 +108,13 @@ impl Tensor {
     ///
     /// # Arguments
     ///
-    /// * `data` - A vector of f32 values representing the tensor's elements.
+    /// * `data` - A vector of f64 values representing the tensor's elements.
     /// * `shape` - A vector of usize values representing the dimensions of the tensor.
     ///
     /// # Panics
     ///
     /// Panics if the number of elements in `data` does not match the product of the dimensions in `shape`.
-    pub fn from_data(data: Vec<f32>, shape: Vec<usize>) -> Self {
+    pub fn from_data(data: Vec<f64>, shape: Vec<usize>) -> Self {
         let shape = TensorShape::new(shape);
         assert_eq!(
             data.len(),
@@ -129,14 +133,14 @@ impl Tensor {
     /// # Returns
     ///
     /// A tensor containing the scalar value with shape `[1]`.
-    pub fn from_scalar(value: f32) -> Self {
+    pub fn from_scalar(value: f64) -> Self {
         Tensor {
             data: vec![value],
             shape: TensorShape::new(vec![1]),
         }
     }
 
-    fn get(&self, indices: &[usize]) -> f32 {
+    fn get(&self, indices: &[usize]) -> f64 {
         assert_eq!(indices.len(), self.shape.dimensions.len());
         let mut flat_index = 0;
         let mut stride = 1;
@@ -151,7 +155,7 @@ impl Tensor {
         self.data[flat_index]
     }
 
-    fn get_broadcasted(&self, indices: &[usize], target_shape: &TensorShape) -> f32 {
+    fn get_broadcasted(&self, indices: &[usize], target_shape: &TensorShape) -> f64 {
         assert!(target_shape.dimensions.len() >= self.shape.dimensions.len());
         let mut adjusted_indices = vec![0; self.shape.dimensions.len()];
         let offset = target_shape.dimensions.len() - self.shape.dimensions.len();
@@ -171,9 +175,103 @@ impl Tensor {
     /// 
     /// # Returns
     /// 
-    /// The sum of all elements as a single f32 value.
-    pub fn sum(self) -> f32 {
-        self.data.iter().sum::<f32>()
+    /// The sum of all elements as a single f64 value.
+    pub fn sum(self) -> f64 {
+        self.data.iter().sum::<f64>()
+    }
+
+    fn tensor_contraction(&self, other: &Self) -> Self {
+        // self: A, i, j, ..., k
+        // other: B, k, ...l, m
+        // result: C, i, j, ..., l, m
+        let a_k = self.shape.dimensions.last().unwrap().clone();
+        let pos_k = self.shape.dimensions.len() - 1;
+        let b_k = other.shape.dimensions.first().unwrap().clone();
+
+        assert!(a_k == b_k || a_k == 1 || b_k == 1,
+            "Matrix multiplication requires the inner dimensions to match or be 1, got {:?} (from {:?}) and {:?} (from {:?})",
+            a_k, self.shape, b_k, other.shape);
+        let max_k = a_k.max(b_k);
+
+        let final_dimensions = self.shape.dimensions[..pos_k]
+            .iter()
+            .chain(other.shape.dimensions.iter().skip(1))
+            .cloned()
+            .collect::<Vec<usize>>();
+        let final_shape = TensorShape::new(final_dimensions);
+
+        let result_data = final_shape
+            .position_iter()
+            .map(|pos| {
+                let mut sum = 0.0;
+                let mut a_indexing = pos.iter().take(pos_k).cloned().collect::<Vec<usize>>();
+                a_indexing.push(0); // Placeholder for the k dimension
+
+                let mut b_indexing = pos.iter().skip(pos_k).cloned().collect::<Vec<usize>>();
+                b_indexing.insert(0, 0); // Placeholder for the k dimension
+
+                for k in 0..max_k {
+                    a_indexing[pos_k] = k.min(a_k - 1); // k or 0 if a_k is 1
+                    let a = self.get(&a_indexing);
+
+                    b_indexing[0] = k.min(b_k - 1); // k or 0 if b_k is 1
+                    let b = other.get(&b_indexing);
+                    sum += a * b;
+                }
+                sum
+            })
+            .collect::<Vec<f64>>();
+
+        Tensor::from_data(result_data, final_shape.dimensions)
+    }
+    
+    fn element_wise_multiplication(&self, other: &Self) -> Self {
+        let combined_shape = TensorShape::broadcast(&self.shape, &other.shape);
+        let result_data = combined_shape
+            .position_iter()
+            .map(|pos| {
+                let value1 = self.get_broadcasted(&pos, &combined_shape);
+                let value2 = other.get_broadcasted(&pos, &combined_shape);
+                value1 * value2
+            })
+            .collect::<Vec<f64>>();
+
+        Tensor::from_data(result_data, combined_shape.dimensions) 
+    }
+}
+
+impl Mul for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, other: Self) -> Self::Output {
+        if self.shape.is_scalar() || other.shape.is_scalar() {
+            return self.element_wise_multiplication(other);
+        }
+
+        if self.shape.dimensions.len() > 1 || 
+           other.shape.dimensions.len() > 1 {
+            return self.tensor_contraction(other);
+        }
+
+        self.element_wise_multiplication(other)
+    }
+}
+
+impl Mul<&Tensor> for f64 {
+    type Output = Tensor;
+
+    fn mul(self, tensor: &Tensor) -> Self::Output {
+        let self_tensor = Tensor::from_scalar(self);
+        &self_tensor * tensor
+    }
+}
+
+impl Mul<f64> for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, scalar: f64) -> Self::Output {
+        let scalar_tensor = Tensor::from_scalar(scalar);
+        self * &scalar_tensor
     }
 }
 
@@ -257,7 +355,7 @@ impl TensorExpression {
             .data
             .iter()
             .map(|&x| x.tanh())
-            .collect::<Vec<f32>>();
+            .collect::<Vec<f64>>();
         let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
 
         TensorExpression::new_unary(self, Operation::Tanh, result_tensor)
@@ -274,7 +372,7 @@ impl TensorExpression {
             .data
             .iter()
             .map(|&x| x.max(0.0))
-            .collect::<Vec<f32>>();
+            .collect::<Vec<f64>>();
         let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
 
         TensorExpression::new_unary(self, Operation::ReLU, result_tensor)
@@ -286,7 +384,7 @@ impl TensorExpression {
             .data
             .iter()
             .map(|&x| x.exp())
-            .collect::<Vec<f32>>();
+            .collect::<Vec<f64>>();
         let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
 
         TensorExpression::new_unary(self, Operation::Exp, result_tensor)
@@ -301,13 +399,13 @@ impl TensorExpression {
     /// # Returns
     /// 
     /// A new tensor expression where each element is raised to the given power.
-    pub fn pow(self, exponent: f32) -> Self {
+    pub fn pow(self, exponent: f64) -> Self {
         let result = self
             .result
             .data
             .iter()
             .map(|&x| x.powf(exponent))
-            .collect::<Vec<f32>>();
+            .collect::<Vec<f64>>();
 
         let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
 
@@ -315,68 +413,6 @@ impl TensorExpression {
         let exponent_tensor = TensorExpression::new_leaf(exponent_tensor, false, None);
 
         TensorExpression::new_binary(self, exponent_tensor, Operation::Pow, result_tensor)
-    }
-
-    fn matrix_multiplication(self, other: Self) -> TensorExpression {
-        // self: A, i, j, ..., k
-        // other: B, k, ...l, m
-        // result: C, i, j, ..., l, m
-        let a_k = self.result.shape.dimensions.last().unwrap().clone();
-        let pos_k = self.result.shape.dimensions.len() - 1;
-        let b_k = other.result.shape.dimensions.first().unwrap().clone();
-
-        assert!(a_k == b_k || a_k == 1 || b_k == 1,
-            "Matrix multiplication requires the inner dimensions to match or be 1, got {:?} (from {:?}) and {:?} (from {:?})",
-            a_k, self.result.shape, b_k, other.result.shape);
-        let max_k = a_k.max(b_k);
-
-        let final_dimensions = self.result.shape.dimensions[..pos_k]
-            .iter()
-            .chain(other.result.shape.dimensions.iter().skip(1))
-            .cloned()
-            .collect::<Vec<usize>>();
-        let final_shape = TensorShape::new(final_dimensions);
-
-        let result_data = final_shape
-            .position_iter()
-            .map(|pos| {
-                let mut sum = 0.0;
-                let mut a_indexing = pos.iter().take(pos_k).cloned().collect::<Vec<usize>>();
-                a_indexing.push(0); // Placeholder for the k dimension
-
-                let mut b_indexing = pos.iter().skip(pos_k).cloned().collect::<Vec<usize>>();
-                b_indexing.insert(0, 0); // Placeholder for the k dimension
-
-                for k in 0..max_k {
-                    a_indexing[pos_k] = k.min(a_k - 1); // k or 0 if a_k is 1
-                    let a = self.result.get(&a_indexing);
-
-                    b_indexing[0] = k.min(b_k - 1); // k or 0 if b_k is 1
-                    let b = other.result.get(&b_indexing);
-                    sum += a * b;
-                }
-                sum
-            })
-            .collect::<Vec<f32>>();
-
-        let result_tensor = Tensor::from_data(result_data, final_shape.dimensions);
-
-        TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
-    }
-    
-    fn element_wise_multiplication(self, other: Self) -> Self {
-        let combined_shape = TensorShape::broadcast(&self.result.shape, &other.result.shape);
-        let result_data = combined_shape
-            .position_iter()
-            .map(|pos| {
-                let value1 = self.result.get_broadcasted(&pos, &combined_shape);
-                let value2 = other.result.get_broadcasted(&pos, &combined_shape);
-                value1 * value2
-            })
-            .collect::<Vec<f32>>();
-
-        let result_tensor = Tensor::from_data(result_data, self.result.shape.dimensions.clone());
-        TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
     }
 
     fn element_to_element_operation(self, other: Self, operation: Operation) -> TensorExpression {
@@ -394,19 +430,11 @@ impl TensorExpression {
                     _ => panic!("Unsupported operation for element-wise operation"),
                 }
             })
-            .collect::<Vec<f32>>();
+            .collect::<Vec<f64>>();
 
         let result_tensor = Tensor::from_data(result_data, combined_shape.dimensions);
 
         TensorExpression::new_binary(self, other, operation, result_tensor)
-    }
-
-    fn matrix_addition(self, other: Self) -> TensorExpression {
-        self.element_to_element_operation(other, Operation::Add)
-    }
-
-    fn matrix_subtraction(self, other: Self) -> TensorExpression {
-        self.element_to_element_operation(other, Operation::Sub)
     }
 
     /// Counts the number of parameters in the tensor expression tree.
@@ -437,29 +465,7 @@ impl Add for TensorExpression {
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
-        self.matrix_addition(other)
-    }
-}
-
-impl Add<f32> for TensorExpression {
-    type Output = Self;
-
-    fn add(self, scalar: f32) -> Self::Output {
-        let scalar_tensor = Tensor::from_scalar(scalar);
-        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
-
-        self + scalar_expression
-    }
-}
-
-impl Mul<f32> for TensorExpression {
-    type Output = Self;
-
-    fn mul(self, scalar: f32) -> Self::Output {
-        let scalar_tensor = Tensor::from_scalar(scalar);
-        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
-
-        self.element_wise_multiplication(scalar_expression)
+        self.element_to_element_operation(other, Operation::Add)
     }
 }
 
@@ -467,12 +473,30 @@ impl Mul for TensorExpression {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
-        if self.result.shape.dimensions.len() > 1 || 
-           other.result.shape.dimensions.len() > 1 {
-            return self.matrix_multiplication(other);
-        }
+        let result_tensor = &self.result * &other.result;
+        TensorExpression::new_binary(self, other, Operation::Mul, result_tensor)
+    }
+}
 
-        self.element_wise_multiplication(other)
+impl Add<f64> for TensorExpression {
+    type Output = Self;
+
+    fn add(self, scalar: f64) -> Self::Output {
+        let scalar_tensor = Tensor::from_scalar(scalar);
+        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
+
+        self + scalar_expression
+    }
+}
+
+impl Mul<f64> for TensorExpression {
+    type Output = Self;
+
+    fn mul(self, scalar: f64) -> Self::Output {
+        let scalar_tensor = Tensor::from_scalar(scalar);
+        let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
+
+        self * scalar_expression
     }
 }
 
@@ -480,14 +504,14 @@ impl Sub for TensorExpression {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        self.matrix_subtraction(other)
+        self.element_to_element_operation(other, Operation::Sub)
     }
 }
 
-impl Sub<f32> for TensorExpression {
+impl Sub<f64> for TensorExpression {
     type Output = Self;
 
-    fn sub(self, scalar: f32) -> Self::Output {
+    fn sub(self, scalar: f64) -> Self::Output {
         let scalar_tensor = Tensor::from_scalar(scalar);
         let scalar_expression = TensorExpression::new_leaf(scalar_tensor, false, None);
 
