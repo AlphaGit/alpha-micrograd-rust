@@ -1,4 +1,4 @@
-use alpha_micrograd_rust::value::Expr;
+use alpha_micrograd_rust::{tensors::Tensor, value::Expr};
 
 use criterion::{BatchSize, Criterion, Throughput};
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
@@ -20,12 +20,15 @@ pub fn mat_mul(xs: &Vec<Vec<Expr>>, w: &Vec<Vec<Expr>>) -> Vec<Vec<Expr>> {
     result
 }
 
-fn get_random_row(n_inputs: u32) -> Vec<Expr> {
+fn get_random_numbers(n: u32) -> Vec<f64> {
     let between = Uniform::new_inclusive(-1.0, 1.0);
     let mut rng = thread_rng();
-    (1..=n_inputs)
-        .map(|_| between.sample(&mut rng))
-        .map(|n| Expr::new_leaf(n))
+    (1..=n).map(|_| between.sample(&mut rng)).collect()
+}
+
+fn get_random_row(n_inputs: u32) -> Vec<Expr> {
+    let random_f32s = get_random_numbers(n_inputs);
+    random_f32s.into_iter().map(|n| Expr::new_leaf(n))
         .collect()
 }
 
@@ -50,3 +53,23 @@ pub(crate) fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
+fn get_random_tensor(n_rows: u32, n_columns: u32) -> Tensor {
+    let total_elements = n_rows * n_columns;
+    let tensor_data = get_random_numbers(total_elements);
+    Tensor::from_data(tensor_data, vec![n_rows as usize, n_columns as usize])
+}
+
+pub(crate) fn criterion_benchmark_tensor(c: &mut Criterion) {
+    let mut group = c.benchmark_group("operations");
+    group.throughput(Throughput::Elements(25 * 25 * 2));
+    group.bench_function("tensor_matmul", |b| {
+        b.iter_batched(|| {
+            let tensor1 = get_random_tensor(25, 25);
+            let tensor2 = get_random_tensor(25, 25);
+            return (tensor1, tensor2);
+        }, |(tensor1, tensor2)| {
+            &tensor1 * &tensor2
+        }, BatchSize::LargeInput);
+    });
+    group.finish();
+}
