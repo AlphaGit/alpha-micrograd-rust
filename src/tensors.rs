@@ -224,19 +224,61 @@ impl Tensor {
 
         Tensor::from_data(result_data, final_shape.dimensions)
     }
-    
-    fn element_wise_multiplication(&self, other: &Self) -> Self {
+
+    fn tanh(&self) -> Self {
+        let result_data = self.data.iter().map(|&x| x.tanh()).collect::<Vec<f64>>();
+        Tensor::from_data(result_data, self.shape.dimensions.clone())
+    }
+
+    fn relu(&self) -> Self {
+        let result_data = self.data.iter().map(|&x| x.max(0.0)).collect::<Vec<f64>>();
+        Tensor::from_data(result_data, self.shape.dimensions.clone())
+    }
+
+    fn exp(&self) -> Self {
+        let result_data = self.data.iter().map(|&x| x.exp()).collect::<Vec<f64>>();
+        Tensor::from_data(result_data, self.shape.dimensions.clone())
+    }
+
+    fn powf(&self, exponent: f64) -> Self {
+        let result_data = self.data.iter().map(|&x| x.powf(exponent)).collect::<Vec<f64>>();
+        Tensor::from_data(result_data, self.shape.dimensions.clone())
+    }
+
+    fn element_wise_operation(&self, other: &Self, operation: Operation) -> Self {
         let combined_shape = TensorShape::broadcast(&self.shape, &other.shape);
         let result_data = combined_shape
             .position_iter()
             .map(|pos| {
                 let value1 = self.get_broadcasted(&pos, &combined_shape);
                 let value2 = other.get_broadcasted(&pos, &combined_shape);
-                value1 * value2
+                match operation {
+                    Operation::Add => value1 + value2,
+                    Operation::Sub => value1 - value2,
+                    Operation::Mul => value1 * value2,
+                    Operation::Div => value1 / value2,
+                    _ => panic!("Unsupported operation for element-wise operation"),
+                }
             })
             .collect::<Vec<f64>>();
 
-        Tensor::from_data(result_data, combined_shape.dimensions) 
+        Tensor::from_data(result_data, combined_shape.dimensions)
+    }
+}
+
+impl Add for &Tensor {
+    type Output = Tensor;
+
+    fn add(self, other: Self) -> Self::Output {
+        self.element_wise_operation(other, Operation::Add)
+    }
+}
+
+impl Sub for &Tensor {
+    type Output = Tensor;
+
+    fn sub(self, other: Self) -> Self::Output {
+        self.element_wise_operation(other, Operation::Sub)
     }
 }
 
@@ -245,7 +287,7 @@ impl Mul for &Tensor {
 
     fn mul(self, other: Self) -> Self::Output {
         if self.shape.is_scalar() || other.shape.is_scalar() {
-            return self.element_wise_multiplication(other);
+            return self.element_wise_operation(other, Operation::Mul);
         }
 
         if self.shape.dimensions.len() > 1 || 
@@ -253,7 +295,7 @@ impl Mul for &Tensor {
             return self.tensor_contraction(other);
         }
 
-        self.element_wise_multiplication(other)
+        self.element_wise_operation(other, Operation::Mul)
     }
 }
 
@@ -350,14 +392,7 @@ impl TensorExpression {
     ///
     /// A new tensor expression where each element is replaced by its tanh value.
     pub fn tanh(self) -> Self {
-        let result = self
-            .result
-            .data
-            .iter()
-            .map(|&x| x.tanh())
-            .collect::<Vec<f64>>();
-        let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
-
+        let result_tensor = self.result.tanh();
         TensorExpression::new_unary(self, Operation::Tanh, result_tensor)
     }
 
@@ -367,26 +402,12 @@ impl TensorExpression {
     ///
     /// A new tensor expression where each element is replaced by the maximum of 0.0 and the original value.
     pub fn relu(self) -> Self {
-        let result = self
-            .result
-            .data
-            .iter()
-            .map(|&x| x.max(0.0))
-            .collect::<Vec<f64>>();
-        let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
-
+        let result_tensor = self.result.relu();
         TensorExpression::new_unary(self, Operation::ReLU, result_tensor)
     }
 
     fn exp(self) -> Self {
-        let result = self
-            .result
-            .data
-            .iter()
-            .map(|&x| x.exp())
-            .collect::<Vec<f64>>();
-        let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
-
+        let result_tensor = self.result.exp(); 
         TensorExpression::new_unary(self, Operation::Exp, result_tensor)
     }
 
@@ -400,41 +421,11 @@ impl TensorExpression {
     /// 
     /// A new tensor expression where each element is raised to the given power.
     pub fn pow(self, exponent: f64) -> Self {
-        let result = self
-            .result
-            .data
-            .iter()
-            .map(|&x| x.powf(exponent))
-            .collect::<Vec<f64>>();
-
-        let result_tensor = Tensor::from_data(result, self.result.shape.dimensions.clone());
-
+        let result_tensor = self.result.powf(exponent);
         let exponent_tensor = Tensor::from_scalar(exponent);
         let exponent_tensor = TensorExpression::new_leaf(exponent_tensor, false, None);
 
         TensorExpression::new_binary(self, exponent_tensor, Operation::Pow, result_tensor)
-    }
-
-    fn element_to_element_operation(self, other: Self, operation: Operation) -> TensorExpression {
-        let combined_shape = TensorShape::broadcast(&self.result.shape, &other.result.shape);
-
-        let result_data = combined_shape
-            .position_iter()
-            .map(|pos| {
-                let value1 = self.result.get_broadcasted(&pos, &combined_shape);
-                let value2 = other.result.get_broadcasted(&pos, &combined_shape);
-                match operation {
-                    Operation::Add => value1 + value2,
-                    Operation::Sub => value1 - value2,
-                    Operation::Mul => value1 * value2,
-                    _ => panic!("Unsupported operation for element-wise operation"),
-                }
-            })
-            .collect::<Vec<f64>>();
-
-        let result_tensor = Tensor::from_data(result_data, combined_shape.dimensions);
-
-        TensorExpression::new_binary(self, other, operation, result_tensor)
     }
 
     /// Counts the number of parameters in the tensor expression tree.
@@ -465,7 +456,8 @@ impl Add for TensorExpression {
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
-        self.element_to_element_operation(other, Operation::Add)
+        let result_tensor = &self.result + &other.result;
+        TensorExpression::new_binary(self, other, Operation::Add, result_tensor)
     }
 }
 
@@ -504,7 +496,8 @@ impl Sub for TensorExpression {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        self.element_to_element_operation(other, Operation::Sub)
+        let result_tensor = &self.result - &other.result;
+        TensorExpression::new_binary(self, other, Operation::Sub, result_tensor)
     }
 }
 
