@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Add, Mul, Sub}, vec};
+use std::{collections::VecDeque, fmt::Display, ops::{Add, AddAssign, Mul, Sub, SubAssign}, vec};
 
 use crate::operations::{Operation, OperationType};
 
@@ -264,6 +264,27 @@ impl Tensor {
 
         Tensor::from_data(result_data, combined_shape.dimensions)
     }
+
+    fn element_wise_operation_mut(&mut self, other: Self, operation: Operation) {
+        let combined_shape = TensorShape::broadcast(&self.shape, &other.shape);
+        let result_data = combined_shape
+            .position_iter()
+            .map(|pos| {
+                let value1 = self.get_broadcasted(&pos, &combined_shape);
+                let value2 = other.get_broadcasted(&pos, &combined_shape);
+                match operation {
+                    Operation::Add => value1 + value2,
+                    Operation::Sub => value1 - value2,
+                    Operation::Mul => value1 * value2,
+                    Operation::Div => value1 / value2,
+                    _ => panic!("Unsupported operation for element-wise operation"),
+                }
+            })
+            .collect::<Vec<f64>>();
+
+        self.data = result_data;
+        self.shape = combined_shape;
+    }
 }
 
 impl Add for &Tensor {
@@ -317,6 +338,18 @@ impl Mul<f64> for &Tensor {
     }
 }
 
+impl SubAssign for Tensor {
+    fn sub_assign(&mut self, other: Self) {
+        self.element_wise_operation_mut(other, Operation::Sub);
+    }
+}
+
+impl AddAssign for Tensor {
+    fn add_assign(&mut self, other: Self) {
+        self.element_wise_operation_mut(other, Operation::Add);
+    }
+}
+
 #[derive(Clone)]
 /// Represents a node in a tensor computation graph, which can be a leaf tensor or an operation applied to one or more tensors.
 pub struct TensorExpression {
@@ -327,7 +360,7 @@ pub struct TensorExpression {
     pub result: Tensor,
     /// Indicates whether this tensor is a learnable parameter.
     pub is_learnable: bool,
-    grad: Option<Tensor>,
+    grad: Tensor,
     name: Option<String>,
 }
 
@@ -346,7 +379,7 @@ impl TensorExpression {
             operation: Operation::None,
             result: tensor,
             is_learnable,
-            grad: None,
+            grad: Tensor::from_scalar(1.0),
             name,
         }
     }
@@ -363,7 +396,7 @@ impl TensorExpression {
             operation,
             result,
             is_learnable: false,
-            grad: None,
+            grad: Tensor::from_scalar(1.0),
             name: None,
         }
     }
@@ -381,7 +414,7 @@ impl TensorExpression {
             operation,
             result,
             is_learnable: false,
-            grad: None,
+            grad: Tensor::from_scalar(1.0),
             name: None,
         }
     }
@@ -449,6 +482,63 @@ impl TensorExpression {
             count += operand2.parameter_count(learnable_only);
         }
         count
+    }
+
+    fn learn_internal_leaf(&mut self, learning_rate: f64) {
+        if self.is_learnable {
+            self.result -= &self.grad * learning_rate;
+        }
+    }
+
+    fn adjust_grad_binary_as_op1(&mut self, operation: &Operation, operation_grad: &Tensor, operand2: &Tensor) {
+        match operation {
+            Operation::Add | Operation::Sub => {
+                self.grad = operation_grad.clone();
+            }
+            Operation::Mul => {
+                self.grad += operand2 * operation_grad;
+            }
+            Operation::Div => {
+                todo!("Implement gradient adjustment for division");
+            }
+            _ => panic!("Unsupported operation for gradient adjustment: {:?}", operation),
+        }
+    }
+
+    /// Learns the parameters of the tensor expression by performing backpropagation.
+    /// 
+    /// * `learning_rate` - The learning rate to use for the update.
+    /// 
+    /// A boolean indicating whether the learning step was successful.
+    pub fn learn(&mut self, learning_rate: f64) {
+        self.grad = Tensor::from_scalar(1.0);
+
+        let mut queue = VecDeque::from([self]);
+
+        while let Some(node) = queue.pop_front() {
+            match node.operation.expr_type() {
+                OperationType::Leaf => {
+                    node.learn_internal_leaf(learning_rate);
+                }
+                OperationType::Unary => {
+                    let operand1 = node.operand1.as_mut().expect("Unary expression did not have an operand");
+                    // operand1.adjust_grad_unary(&node.operation, node.grad, node.result);
+                    queue.push_back(operand1);
+                }
+                OperationType::Binary => {
+                    let operand1 = node.operand1.as_mut().expect("Binary expression did not have an operand");
+                    let operand2 = node.operand2.as_mut().expect("Binary expression did not have a second operand");
+
+                    operand1.adjust_grad_binary_as_op1(&node.operation, &node.grad, &operand2.result);
+                    // operand2.adjust_grad_binary_as_op2(&node.operation, &node.grad, operand1);
+
+                    todo!("Implement gradient adjustment for binary operations");
+
+                    queue.push_back(operand1);
+                    queue.push_back(operand2);
+                }
+            }
+        }
     }
 }
 

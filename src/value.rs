@@ -69,14 +69,6 @@ impl Expr {
         expr
     }
 
-    pub(crate) fn expr_type(&self) -> OperationType {
-        match self.operation {
-            Operation::None => OperationType::Leaf,
-            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => OperationType::Unary,
-            _ => OperationType::Binary,
-        }
-    }
-
     fn new_unary(operand: Expr, operation: Operation, result: f64) -> Expr {
         operation.assert_is_type(OperationType::Unary);
         Expr {
@@ -235,7 +227,7 @@ impl Expr {
         // the current node, this approach will need to stay recursive for now.
         // We can replace it with an iterative approach after we implement an allocation arena at the
         // tree level and then we can just visit them in a regular loop.
-        match self.expr_type() {
+        match self.operation.expr_type() {
             OperationType::Leaf => {}
             OperationType::Unary => {
                 let operand1 = self.operand1.as_mut().expect("Unary expression did not have an operand");
@@ -296,7 +288,7 @@ impl Expr {
         let mut queue = VecDeque::from([self]);
 
         while let Some(node) = queue.pop_front() {
-            match node.expr_type() {
+            match node.operation.expr_type() {
                 OperationType::Leaf => {
                     node.learn_internal_leaf(learning_rate);
                 }
