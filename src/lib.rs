@@ -13,3 +13,5 @@ pub mod nn;
 pub mod compiled;
 /// Module containing operation types and enums
 pub mod operations;
+/// Module containing multi-value (matrices) operations and types
+pub mod multi_value;
