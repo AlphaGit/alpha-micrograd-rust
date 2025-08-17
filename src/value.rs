@@ -7,38 +7,7 @@
 use std::collections::VecDeque;
 use std::ops::{Add, Div, Mul, Sub};
 use std::iter::Sum;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Operation {
-    None,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Tanh,
-    Exp,
-    Pow,
-    ReLU,
-    Log,
-    Neg,
-}
-
-impl Operation {
-    fn assert_is_type(&self, expr_type: ExprType) {
-        match self {
-            Operation::None => assert_eq!(expr_type, ExprType::Leaf),
-            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => assert_eq!(expr_type, ExprType::Unary),
-            _ => assert_eq!(expr_type, ExprType::Binary),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum ExprType {
-    Leaf,
-    Unary,
-    Binary,
-}
+use crate::operations::{Operation, OperationType};
 
 /// Expression representing a node in a calculation graph.
 /// 
@@ -101,16 +70,8 @@ impl Expr {
         expr
     }
 
-    pub(crate) fn expr_type(&self) -> ExprType {
-        match self.operation {
-            Operation::None => ExprType::Leaf,
-            Operation::Tanh | Operation::Exp | Operation::ReLU | Operation::Log | Operation::Neg => ExprType::Unary,
-            _ => ExprType::Binary,
-        }
-    }
-
     fn new_unary(operand: Expr, operation: Operation, result: f64) -> Expr {
-        operation.assert_is_type(ExprType::Unary);
+        operation.assert_is_type(OperationType::Unary);
         Expr {
             operand1: Some(Box::new(operand)),
             operand2: None,
@@ -123,7 +84,7 @@ impl Expr {
     }
 
     fn new_binary(operand1: Expr, operand2: Expr, operation: Operation, result: f64) -> Expr {
-        operation.assert_is_type(ExprType::Binary);
+        operation.assert_is_type(OperationType::Binary);
         Expr {
             operand1: Some(Box::new(operand1)),
             operand2: Some(Box::new(operand2)),
@@ -267,9 +228,9 @@ impl Expr {
         // the current node, this approach will need to stay recursive for now.
         // We can replace it with an iterative approach after we implement an allocation arena at the
         // tree level and then we can just visit them in a regular loop.
-        match self.expr_type() {
-            ExprType::Leaf => {}
-            ExprType::Unary => {
+        match self.operation.expr_type() {
+            OperationType::Leaf => {}
+            OperationType::Unary => {
                 let operand1 = self.operand1.as_mut().expect("Unary expression did not have an operand");
                 operand1.recalculate();
 
@@ -282,7 +243,7 @@ impl Expr {
                     _ => panic!("Invalid unary operation {:?}", self.operation),
                 };
             }
-            ExprType::Binary => {
+            OperationType::Binary => {
                 let operand1 = self.operand1.as_mut().expect("Binary expression did not have an operand");
                 let operand2 = self.operand2.as_mut().expect("Binary expression did not have a second operand");
 
@@ -328,16 +289,16 @@ impl Expr {
         let mut queue = VecDeque::from([self]);
 
         while let Some(node) = queue.pop_front() {
-            match node.expr_type() {
-                ExprType::Leaf => {
+            match node.operation.expr_type() {
+                OperationType::Leaf => {
                     node.learn_internal_leaf(learning_rate);
                 }
-                ExprType::Unary => {
+                OperationType::Unary => {
                     let operand1 = node.operand1.as_mut().expect("Unary expression did not have an operand");
                     operand1.adjust_grad_unary(&node.operation, node.grad, node.result);
                     queue.push_back(operand1);
                 }
-                ExprType::Binary => {
+                OperationType::Binary => {
                     let operand1 = node.operand1.as_mut().expect("Binary expression did not have an operand");
                     let operand2 = node.operand2.as_mut().expect("Binary expression did not have a second operand");
 
@@ -377,7 +338,7 @@ impl Expr {
             Operation::Neg => {
                 self.grad = -child_grad;
             }
-            _ => panic!("Invalid unary operation {:?}", child_operation),
+            _ => panic!("Invalid unary operation {child_operation:?}"),
         }
     }
 
@@ -405,7 +366,7 @@ impl Expr {
 
                 self.grad = child_grad * exponent * base.powf(exponent - 1.0);
             }
-            _ => panic!("Invalid binary operation: {:?}", child_operation),
+            _ => panic!("Invalid binary operation: {child_operation:?}"),
         }
     }
 
@@ -433,7 +394,7 @@ impl Expr {
 
                 self.grad = child_grad * base.powf(exponent) * base.ln();
             }
-            _ => panic!("Invalid binary operation: {:?}", child_operation),
+            _ => panic!("Invalid binary operation: {child_operation:?}"),
         }
     }
 
