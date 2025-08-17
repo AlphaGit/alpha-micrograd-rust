@@ -4,15 +4,15 @@
 //! - [`Neuron`]: weight and bias
 //! - [`Layer`]: a collection of neurons
 //! - [`MLP`]: multilayer-perceptron, a collection of layers and activation function
-//! 
+//!
 //! All of them have a `forward` method to calculate the output of the element.
 #![deny(missing_docs)]
-use std::fmt::Display;
 use crate::value::Expr;
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng};
+use std::fmt::Display;
 
 /// A neuron in a neural network.
-/// 
+///
 /// A neuron has a collection of weights and a bias. It calculates the weighted sum of the inputs
 /// and applies an activation function to the result.
 pub struct Neuron {
@@ -22,7 +22,7 @@ pub struct Neuron {
 }
 
 /// A layer in a neural network.
-/// 
+///
 /// A layer is a collection of [`Neuron`s](Neuron). It calculates the output of each neuron in the layer.
 /// The output of the layer is the collection of the outputs of the neurons.
 pub struct Layer {
@@ -30,7 +30,7 @@ pub struct Layer {
 }
 
 /// A multilayer perceptron.
-/// 
+///
 /// A multilayer perceptron is a collection of [`Layer`s](Layer). It calculates the output of each layer
 /// and passes it to the next layer.
 /// The output of the MLP is the output of the last layer.
@@ -39,7 +39,7 @@ pub struct MLP {
 }
 
 /// Activation functions for neurons.
-/// 
+///
 /// The activation function is applied to the weighted sum of the inputs and the bias.
 #[derive(Debug, Copy, Clone)]
 pub enum Activation {
@@ -55,7 +55,7 @@ impl Neuron {
     /// Create a new [`Neuron`] with `n_inputs` inputs.
     ///
     /// The weights and bias are initialized randomly from a uniform distribution between -1 and 1.
-    /// 
+    ///
     /// The weights are named `w_i` where `i` is the index of the weight (starting from 1).
     /// The bias is named `b`.
     pub fn new(n_inputs: u32, activation: Activation) -> Neuron {
@@ -103,7 +103,8 @@ impl Neuron {
 
 impl Display for Neuron {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let weights = self.w
+        let weights = self
+            .w
             .iter()
             .map(|w| format!("{:.2}", w.result))
             .collect::<Vec<_>>()
@@ -119,7 +120,9 @@ impl Layer {
     /// Each neuron has `n_inputs` inputs.
     pub fn new(n_inputs: u32, n_outputs: u32, activation: Activation) -> Layer {
         Layer {
-            neurons: (0..n_outputs).map(|_| Neuron::new(n_inputs, activation)).collect(),
+            neurons: (0..n_outputs)
+                .map(|_| Neuron::new(n_inputs, activation))
+                .collect(),
         }
     }
 
@@ -133,7 +136,8 @@ impl Layer {
 
 impl Display for Layer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let neurons = self.neurons
+        let neurons = self
+            .neurons
             .iter()
             .map(|n| format!("{n:}"))
             .collect::<Vec<_>>()
@@ -151,23 +155,30 @@ impl MLP {
     /// The last layer has `n_hidden[n_hidden.len() - 1]` inputs and `n_outputs` neurons.
     /// The activation functions for the input, hidden, and output layers are `input_activation`, `hidden_activation`, and `output_activation`, respectively.
     pub fn new(
-        n_inputs: u32, input_activation: Activation,
-        n_hidden: Vec<u32>, hidden_activation: Activation,
-        n_outputs: u32, output_activation: Activation) -> MLP {
-
+        n_inputs: u32,
+        input_activation: Activation,
+        n_hidden: Vec<u32>,
+        hidden_activation: Activation,
+        n_outputs: u32,
+        output_activation: Activation,
+    ) -> MLP {
         let mut layers = Vec::new();
 
         layers.push(Layer::new(n_inputs, n_hidden[0], input_activation));
         for i in 1..n_hidden.len() {
             layers.push(Layer::new(n_hidden[i - 1], n_hidden[i], hidden_activation));
         }
-        layers.push(Layer::new(n_hidden[n_hidden.len() - 1], n_outputs, output_activation));
+        layers.push(Layer::new(
+            n_hidden[n_hidden.len() - 1],
+            n_outputs,
+            output_activation,
+        ));
 
         MLP { layers }
     }
 
     /// Calculate the output of the MLP for the given inputs.
-    /// 
+    ///
     /// The output of the MLP is the output of the last layer.
     pub fn forward(&self, x: Vec<Expr>) -> Vec<Expr> {
         let mut y = x;
@@ -180,12 +191,13 @@ impl MLP {
 
 impl Display for MLP {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let layers = self.layers
+        let layers = self
+            .layers
             .iter()
             .map(|l| format!("{l:}"))
             .collect::<Vec<_>>()
             .join("\n\n");
-        write!(f, "MLP:\n{layers:}")
+        write!(f, "MLP:\n{layers}")
     }
 }
 
@@ -209,8 +221,8 @@ mod tests {
 
         let x = vec![
             Expr::new_leaf(0.0),
-            Expr::new_leaf(1.0), 
-            Expr::new_leaf(2.0)
+            Expr::new_leaf(1.0),
+            Expr::new_leaf(2.0),
         ];
 
         let _ = n.forward(x);
@@ -231,7 +243,7 @@ mod tests {
         let x = vec![
             Expr::new_leaf(0.0),
             Expr::new_leaf(1.0),
-            Expr::new_leaf(2.0)
+            Expr::new_leaf(2.0),
         ];
 
         let y = l.forward(x);
@@ -241,9 +253,14 @@ mod tests {
 
     #[test]
     fn can_instantiate_mlp() {
-        let m = MLP::new(3, Activation::None,
-            vec![2, 2], Activation::Tanh,
-            1, Activation::None);
+        let m = MLP::new(
+            3,
+            Activation::None,
+            vec![2, 2],
+            Activation::Tanh,
+            1,
+            Activation::None,
+        );
 
         assert_eq!(m.layers.len(), 3);
         assert_eq!(m.layers[0].neurons.len(), 2); // 2 neurons
@@ -258,14 +275,19 @@ mod tests {
 
     #[test]
     fn can_do_forward_pass_mlp() {
-        let m = MLP::new(3, Activation::None,
-            vec![2, 2], Activation::Tanh,
-            1, Activation::None);
+        let m = MLP::new(
+            3,
+            Activation::None,
+            vec![2, 2],
+            Activation::Tanh,
+            1,
+            Activation::None,
+        );
 
         let x = vec![
             Expr::new_leaf(0.0),
             Expr::new_leaf(1.0),
-            Expr::new_leaf(2.0)
+            Expr::new_leaf(2.0),
         ];
 
         let y = m.forward(x);
@@ -275,23 +297,44 @@ mod tests {
 
     #[test]
     fn can_learn() {
-        let mlp = MLP::new(3, Activation::None,
-            vec![2, 2], Activation::Tanh,
-            1, Activation::None);
+        let mlp = MLP::new(
+            3,
+            Activation::None,
+            vec![2, 2],
+            Activation::Tanh,
+            1,
+            Activation::None,
+        );
 
         let mut inputs = vec![
-            vec![Expr::new_leaf(2.0), Expr::new_leaf(3.0), Expr::new_leaf(-1.0)],
-            vec![Expr::new_leaf(3.0), Expr::new_leaf(-1.0), Expr::new_leaf(0.5)],
-            vec![Expr::new_leaf(0.5), Expr::new_leaf(1.0), Expr::new_leaf(1.0)],
-            vec![Expr::new_leaf(1.0), Expr::new_leaf(1.0), Expr::new_leaf(-1.0)],
+            vec![
+                Expr::new_leaf(2.0),
+                Expr::new_leaf(3.0),
+                Expr::new_leaf(-1.0),
+            ],
+            vec![
+                Expr::new_leaf(3.0),
+                Expr::new_leaf(-1.0),
+                Expr::new_leaf(0.5),
+            ],
+            vec![
+                Expr::new_leaf(0.5),
+                Expr::new_leaf(1.0),
+                Expr::new_leaf(1.0),
+            ],
+            vec![
+                Expr::new_leaf(1.0),
+                Expr::new_leaf(1.0),
+                Expr::new_leaf(-1.0),
+            ],
         ];
 
         // make these non-learnable
-        inputs.iter_mut().for_each(|instance| 
-            instance.iter_mut().for_each(|input| 
-                input.is_learnable = false
-            )
-        );
+        inputs.iter_mut().for_each(|instance| {
+            instance
+                .iter_mut()
+                .for_each(|input| input.is_learnable = false)
+        });
 
         let mut targets = vec![
             Expr::new_leaf(1.0),
@@ -300,7 +343,9 @@ mod tests {
             Expr::new_leaf(1.0),
         ];
         // make these non-learnable
-        targets.iter_mut().for_each(|target| target.is_learnable = false);
+        targets
+            .iter_mut()
+            .for_each(|target| target.is_learnable = false);
 
         let predicted = inputs
             .iter()
@@ -332,6 +377,11 @@ mod tests {
         loss.recalculate();
         let second_loss = loss.result.clone();
 
-        assert!(second_loss < first_loss, "Loss should decrease after learning ({} >= {})", second_loss, first_loss);
+        assert!(
+            second_loss < first_loss,
+            "Loss should decrease after learning ({} >= {})",
+            second_loss,
+            first_loss
+        );
     }
 }
